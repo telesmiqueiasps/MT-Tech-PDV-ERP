@@ -1,0 +1,38 @@
+ALTER TABLE clientes ADD COLUMN tipo_pessoa        TEXT DEFAULT 'F';
+ALTER TABLE clientes ADD COLUMN cpf                TEXT;
+ALTER TABLE clientes ADD COLUMN cnpj               TEXT;
+ALTER TABLE clientes ADD COLUMN rg                 TEXT;
+ALTER TABLE clientes ADD COLUMN ie                 TEXT;
+ALTER TABLE clientes ADD COLUMN ind_ie             INTEGER DEFAULT 9;
+ALTER TABLE clientes ADD COLUMN im                 TEXT;
+ALTER TABLE clientes ADD COLUMN suframa            TEXT;
+ALTER TABLE clientes ADD COLUMN email              TEXT;
+ALTER TABLE clientes ADD COLUMN cod_municipio_ibge TEXT;
+ALTER TABLE clientes ADD COLUMN cod_pais           TEXT DEFAULT '1058';
+ALTER TABLE clientes ADD COLUMN nome_pais          TEXT DEFAULT 'Brasil';
+
+ALTER TABLE fornecedores ADD COLUMN tipo_pessoa        TEXT DEFAULT 'J';
+ALTER TABLE fornecedores ADD COLUMN cpf                TEXT;
+ALTER TABLE fornecedores ADD COLUMN cnpj               TEXT;
+ALTER TABLE fornecedores ADD COLUMN ie                 TEXT;
+ALTER TABLE fornecedores ADD COLUMN ind_ie             INTEGER DEFAULT 1;
+ALTER TABLE fornecedores ADD COLUMN im                 TEXT;
+ALTER TABLE fornecedores ADD COLUMN suframa            TEXT;
+ALTER TABLE fornecedores ADD COLUMN email              TEXT;
+ALTER TABLE fornecedores ADD COLUMN cnae               TEXT;
+ALTER TABLE fornecedores ADD COLUMN regime_tributario  INTEGER DEFAULT 1;
+ALTER TABLE fornecedores ADD COLUMN cod_municipio_ibge TEXT;
+ALTER TABLE fornecedores ADD COLUMN cod_pais           TEXT DEFAULT '1058';
+ALTER TABLE fornecedores ADD COLUMN nome_pais          TEXT DEFAULT 'Brasil';
+
+ALTER TABLE produtos ADD COLUMN cest         TEXT;
+ALTER TABLE produtos ADD COLUMN origem       INTEGER DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN cst_icms     TEXT;
+ALTER TABLE produtos ADD COLUMN cst_pis      TEXT DEFAULT '07';
+ALTER TABLE produtos ADD COLUMN cst_cofins   TEXT DEFAULT '07';
+ALTER TABLE produtos ADD COLUMN aliq_icms    REAL DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN aliq_pis     REAL DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN aliq_cofins  REAL DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN aliq_ipi     REAL DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN peso_bruto   REAL DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN peso_liquido REAL DEFAULT 0;

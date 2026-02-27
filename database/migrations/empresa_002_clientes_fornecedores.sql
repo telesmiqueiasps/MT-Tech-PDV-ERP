@@ -1,0 +1,22 @@
+ALTER TABLE clientes ADD COLUMN cpf_cnpj      TEXT;
+ALTER TABLE clientes ADD COLUMN telefone      TEXT;
+ALTER TABLE clientes ADD COLUMN cep           TEXT;
+ALTER TABLE clientes ADD COLUMN endereco      TEXT;
+ALTER TABLE clientes ADD COLUMN numero        TEXT;
+ALTER TABLE clientes ADD COLUMN complemento   TEXT;
+ALTER TABLE clientes ADD COLUMN bairro        TEXT;
+ALTER TABLE clientes ADD COLUMN cidade        TEXT;
+ALTER TABLE clientes ADD COLUMN estado        TEXT;
+ALTER TABLE clientes ADD COLUMN limite_credito REAL DEFAULT 0;
+
+ALTER TABLE fornecedores ADD COLUMN cnpj        TEXT;
+ALTER TABLE fornecedores ADD COLUMN telefone    TEXT;
+ALTER TABLE fornecedores ADD COLUMN cep         TEXT;
+ALTER TABLE fornecedores ADD COLUMN endereco    TEXT;
+ALTER TABLE fornecedores ADD COLUMN numero      TEXT;
+ALTER TABLE fornecedores ADD COLUMN complemento TEXT;
+ALTER TABLE fornecedores ADD COLUMN bairro      TEXT;
+ALTER TABLE fornecedores ADD COLUMN cidade      TEXT;
+ALTER TABLE fornecedores ADD COLUMN estado      TEXT;
+ALTER TABLE fornecedores ADD COLUMN contato     TEXT;
+ALTER TABLE fornecedores ADD COLUMN observacoes TEXT;
