@@ -432,7 +432,9 @@ class FormNota(BaseView):
                  cst_icms=self._cst_icms,
                  cst_pisc=self._cst_pisc,
                  regra_padrao=regra,
-                 ao_confirmar=self._on_item_add)
+                 ao_confirmar=self._on_item_add,
+                 uf_empresa=self._uf_empresa,
+                 uf_terceiro=self._var_terc_uf.get().strip().upper())
 
     def _on_item_add(self, item: dict):
         self._itens.append(item)
@@ -462,7 +464,9 @@ class FormNota(BaseView):
                  cst_icms=self._cst_icms,
                  cst_pisc=self._cst_pisc,
                  regra_padrao=regra,
-                 ao_confirmar=lambda it, i=idx: self._on_item_edit(i, it))
+                 ao_confirmar=lambda it, i=idx: self._on_item_edit(i, it),
+                 uf_empresa=self._uf_empresa,
+                 uf_terceiro=self._var_terc_uf.get().strip().upper())
 
     def _on_item_edit(self, idx: int, item: dict):
         self._itens[idx] = item
@@ -677,7 +681,8 @@ class FormNota(BaseView):
 class FormItem(BaseView):
     def __init__(self, master, produtos, tipo_nota,
                  item=None, cfops=None, cst_icms=None, cst_pisc=None,
-                 regra_padrao=None, ao_confirmar=None):
+                 regra_padrao=None, ao_confirmar=None,
+                 uf_empresa: str = "", uf_terceiro: str = ""):
         super().__init__(master, "📦 Item da Nota Fiscal", 600, 680, modal=True)
         self.resizable(True, True)
         self._produtos    = produtos or []
@@ -688,6 +693,8 @@ class FormItem(BaseView):
         self._cst_pisc    = cst_pisc or []
         self._regra       = regra_padrao
         self._ao_confirmar= ao_confirmar
+        self._uf_empresa  = uf_empresa.strip().upper()
+        self._uf_terceiro = uf_terceiro.strip().upper()
         self._build()
         if item:
             self._preencher()
@@ -859,6 +866,13 @@ class FormItem(BaseView):
         self._var_aliq_icms.trace_add("write", self._calc_icms)
         self._var_bc_icms.trace_add("write", self._calc_icms)
 
+        # Badge informativo: de onde veio a alíquota ICMS
+        self._lbl_fonte_aliq = tk.Label(
+            c3, text="", font=("TkDefaultFont", 8),
+            bg=THEME["bg_card"], fg="#0077cc", anchor="e"
+        )
+        self._lbl_fonte_aliq.pack(anchor="e", pady=(0, 4))
+
         # IPI
         row_ipi = tk.Frame(c3, bg=THEME["bg_card"])
         row_ipi.pack(fill="x", pady=(0, 6))
@@ -946,11 +960,51 @@ class FormItem(BaseView):
         self._var_unid.set(p.get("unidade") or "UN")
         preco = p.get("preco_custo") or p.get("preco_venda") or 0
         self._var_vun.set(f"{float(preco):.4f}")
-        self._var_cst_icms.set(p.get("cst_icms") or "")
-        self._var_aliq_icms.set(_f2s(p.get("aliq_icms") or 0))
+
+        # ── Prioridade de alíquota ICMS:
+        #    1. Produto tem alíquota própria cadastrada  → usa do produto
+        #    2. Tabela fiscal_aliq_icms tem par UF       → usa da tabela
+        #    3. Regra padrão já aplicada pelo _aplicar_regra
+        aliq_prod = p.get("aliq_icms") or 0
+        fonte_aliq = ""
+        if aliq_prod and float(aliq_prod) > 0:
+            aliq_final = float(aliq_prod)
+            fonte_aliq = f"do produto ({aliq_final:.2f}%)"
+        elif self._uf_empresa and self._uf_terceiro:
+            from models.fiscal_config import FiscalConfig
+            aliq_uf = FiscalConfig.aliquota_icms(self._uf_empresa, self._uf_terceiro)
+            if aliq_uf > 0:
+                aliq_final = aliq_uf
+                fonte_aliq = (
+                    f"tabela UF {self._uf_empresa}→{self._uf_terceiro} ({aliq_final:.2f}%)"
+                    if self._uf_empresa != self._uf_terceiro
+                    else f"alíq. interna {self._uf_empresa} ({aliq_final:.2f}%)"
+                )
+            else:
+                aliq_final = aliq_prod
+        else:
+            aliq_final = aliq_prod
+
+        self._var_aliq_icms.set(_f2s(aliq_final))
+        if fonte_aliq and hasattr(self, "_lbl_fonte_aliq"):
+            self._lbl_fonte_aliq.configure(
+                text=f"ℹ  Alíq. ICMS: {fonte_aliq}", fg="#0077cc"
+            )
+
+        # CST e alíquotas PIS/COFINS/IPI vêm do produto
+        self._var_cst_icms.set(p.get("cst_icms") or p.get("csosn") or "")
         self._var_aliq_ipi.set(_f2s(p.get("aliq_ipi") or 0))
         self._var_aliq_pis.set(_f2s(p.get("aliq_pis") or "0.65"))
         self._var_aliq_cof.set(_f2s(p.get("aliq_cofins") or "3.00"))
+
+        # Atualiza SearchEntry do CST se tiver valor
+        cst_val = p.get("cst_icms") or p.get("csosn") or ""
+        if cst_val:
+            for ci in self._se_cst._items:
+                if ci["codigo"] == cst_val:
+                    self._se_cst.set_item(ci)
+                    break
+
         self._item["produto_id"] = p["id"]
         self._calc_total()
 

@@ -645,6 +645,20 @@ class WizardEntradaXML(BaseView):
             self._var_msg.set("Selecione o depósito.")
             return
 
+        # ── Bloquear período fiscal fechado ANTES de qualquer operação ──
+        from services.fiscal_guard import FiscalGuard, FiscalBloqueado
+        nota_aux = self._parsed.get("nota", {})
+        data_ref = (
+            self._date_entrada.get()
+            if hasattr(self, "_date_entrada") and self._date_entrada.get()
+            else nota_aux.get("data_entrada") or nota_aux.get("data_emissao") or ""
+        )
+        try:
+            FiscalGuard.verificar(data_ref, "importar esta nota fiscal")
+        except FiscalBloqueado as e:
+            messagebox.showerror("Período Fiscal Fechado", str(e), parent=self)
+            return
+
         from models.nota_fiscal import NotaFiscal
 
         # Validação de duplicata

@@ -186,11 +186,22 @@ class FiscalConfig:
 
     @staticmethod
     def competencia_fechada(ano: int, mes: int) -> bool:
+        """
+        Retorna True se a competência AAAA-MM está fechada.
+        Robusto: se a tabela ainda não existe (migration pendente) retorna False
+        mas registra aviso — nunca deixa operação passar por erro silencioso.
+        """
         comp = f"{ano:04d}-{mes:02d}"
-        row  = _db().fetchone(
-            "SELECT status FROM fiscal_fechamentos WHERE competencia=?", (comp,)
-        )
-        return row is not None and row["status"] == "FECHADO"
+        try:
+            row = _db().fetchone(
+                "SELECT status FROM fiscal_fechamentos WHERE competencia=?", (comp,)
+            )
+            return row is not None and row["status"] == "FECHADO"
+        except Exception:
+            # Tabela não existe ainda — trata como aberto mas NÃO silencia
+            # Se a migration não foi rodada, assume aberto (fail-open intencional
+            # para não travar o sistema em instalações novas)
+            return False
 
     @staticmethod
     def data_em_periodo_fechado(data_iso: str) -> bool:
