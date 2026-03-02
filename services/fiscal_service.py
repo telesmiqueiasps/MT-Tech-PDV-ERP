@@ -98,6 +98,11 @@ class FiscalService:
 
         # ── 5. Marcar autorizada
         NotaFiscal.atualizar_status(nota_id, "AUTORIZADA")
+        from core.audit import Audit
+        Audit.fiscal("AUTORIZAR", nota_id,
+                     f"NF {nota.get('numero','')}/{nota.get('serie',1)} — "
+                     f"{nota.get('terceiro_nome','')} — "
+                     f"R$ {nota.get('total_nf', 0):.2f}")
 
     @staticmethod
     def lancar(nota_id: int):
@@ -152,6 +157,10 @@ class FiscalService:
         obs_nova  = f"{obs_atual}\nESTORNO: {motivo}".strip()
         NotaFiscal.atualizar_status(nota_id, "RASCUNHO",
                                     observacoes=obs_nova)
+        from core.audit import Audit
+        Audit.fiscal("ESTORNAR", nota_id,
+                     f"NF {nota.get('numero','')}/{nota.get('serie',1)} — "
+                     f"Motivo: {motivo}")
 
     # ── Cancelamento ─────────────────────────────────────────────
 
@@ -174,6 +183,10 @@ class FiscalService:
         obs = f"CANCELAMENTO: {motivo}" if motivo else "CANCELAMENTO"
         NotaFiscal.atualizar_status(nota_id, "CANCELADA",
                                     observacoes=f"{nota.get('observacoes') or ''}\n{obs}".strip())
+        from core.audit import Audit
+        Audit.fiscal("CANCELAR", nota_id,
+                     f"NF {nota.get('numero','')}/{nota.get('serie',1)} — "
+                     f"Motivo: {motivo}")
 
     # ── Devolução ────────────────────────────────────────────────
 

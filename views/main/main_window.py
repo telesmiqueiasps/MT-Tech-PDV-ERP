@@ -1,3 +1,5 @@
+
+
 import tkinter as tk
 from config import THEME, FONT, APP_NAME
 from core.session import Session
@@ -83,8 +85,9 @@ class MainWindow:
         # Admin global só acessa Administração
         if Session.is_admin_global():
             return [
-                {"id": "admin",        "texto": "⚙  Administração",       "cmd": self._abrir_admin},
-                {"id": "fiscal_cfg",   "texto": "🧾  Config. Fiscal",     "cmd": self._abrir_fiscal_config},
+                {"id": "admin",       "texto": "⚙  Administração",    "cmd": self._abrir_admin},
+                {"id": "fiscal_cfg",  "texto": "🧾  Config. Fiscal",  "cmd": self._abrir_fiscal_config},
+                {"id": "auditoria",   "texto": "🔍  Auditoria",       "cmd": self._abrir_auditoria},
             ]
 
         itens = [
@@ -108,11 +111,11 @@ class MainWindow:
             itens.append({"id": "financeiro", "texto": "💰  Financeiro", "cmd": self._em_breve})
         if pode("relatorios", "ver"):
             itens.append({"id": "relatorios", "texto": "📈  Relatórios", "cmd": self._em_breve})
-            
+        if Session.is_admin_global():
+            itens.append({"id": "fiscal_gestao", "texto": "⚖️  Gestão Fiscal", "cmd": self._abrir_gestao_fiscal})
         if Session.is_admin_global() or pode("admin", "ver"):
             itens.append(None)
             itens.append({"id": "admin", "texto": "⚙  Administração", "cmd": self._abrir_admin})
-            itens.append({"id": "fiscal_gestao", "texto": "⚖️  Gestão Fiscal", "cmd": self._abrir_fiscal_config})
         return itens
 
     def _build_topbar(self):
@@ -153,11 +156,19 @@ class MainWindow:
         ProdutosView(self._conteudo)
 
 
+
+
     def _abrir_fiscal_config(self):
         self._limpar()
         self._set_ativo("fiscal_cfg", "Configurações Fiscais")
         from views.fiscal.fiscal_config_view import FiscalConfigView
         FiscalConfigView(self._conteudo)
+
+    def _abrir_auditoria(self):
+        self._limpar()
+        self._set_ativo("auditoria", "Auditoria do Sistema")
+        from views.admin.audit_view import AuditView
+        AuditView(self._conteudo)
 
     def _abrir_fiscal(self):
         self._limpar()
@@ -165,6 +176,11 @@ class MainWindow:
         from views.fiscal.notas_view import NotasView
         NotasView(self._conteudo)
 
+    def _abrir_gestao_fiscal(self):
+        self._limpar()
+        self._set_ativo("fiscal_gestao", "Gestão Fiscal")
+        from views.fiscal.fiscal_config_view import GestaoFiscalView
+        GestaoFiscalView(self._conteudo)
 
     def _abrir_estoque(self):
         self._limpar()
@@ -194,4 +210,4 @@ class MainWindow:
         from tkinter import messagebox
         if messagebox.askyesno("Sair", "Deseja encerrar a sessão?", parent=self._root):
             Auth.logout()
-            self._root.destroy()
+            self._root.destroy()            

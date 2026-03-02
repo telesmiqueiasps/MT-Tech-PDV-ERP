@@ -52,7 +52,7 @@ class Produto:
 
     @staticmethod
     def criar(dados: dict) -> int:
-        return Produto._db().execute(
+        pid = Produto._db().execute(
             """
             INSERT INTO produtos (
                 codigo, codigo_barras, ean, nome, categoria_id,
@@ -67,9 +67,16 @@ class Produto:
             """,
             _campos_produto(dados)
         )
+        from core.audit import Audit
+        Audit.insert("produtos", pid,
+                     {"nome": dados.get("nome"), "codigo": dados.get("codigo"),
+                      "preco_venda": dados.get("preco_venda")},
+                     modulo="produtos")
+        return pid
 
     @staticmethod
     def atualizar(id: int, dados: dict):
+        antes = Produto.buscar_por_id(id) or {}
         Produto._db().execute(
             """
             UPDATE produtos SET
@@ -85,6 +92,15 @@ class Produto:
             """,
             _campos_produto(dados, update=True) + (id,)
         )
+        from core.audit import Audit
+        Audit.update("produtos", id,
+                     antes={"nome": antes.get("nome"),
+                             "preco_venda": antes.get("preco_venda"),
+                             "preco_custo": antes.get("preco_custo")},
+                     depois={"nome": dados.get("nome"),
+                              "preco_venda": dados.get("preco_venda"),
+                              "preco_custo": dados.get("preco_custo")},
+                     modulo="produtos")
 
     @staticmethod
     def desativar(id: int):

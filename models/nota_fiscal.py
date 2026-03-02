@@ -93,7 +93,7 @@ class NotaFiscal:
 
     @staticmethod
     def criar(dados: dict) -> int:
-        return _db().execute(
+        nota_id = _db().execute(
             """
             INSERT INTO notas_fiscais (
                 tipo, modelo, status, numero, serie,
@@ -109,6 +109,13 @@ class NotaFiscal:
             """,
             NotaFiscal._tupla(dados)
         )
+        from core.audit import Audit
+        Audit.insert("notas_fiscais", nota_id, {
+            "tipo": dados.get("tipo"), "status": dados.get("status"),
+            "numero": dados.get("numero"), "terceiro_nome": dados.get("terceiro_nome"),
+            "total_nf": dados.get("total_nf"),
+        }, modulo="fiscal")
+        return nota_id
 
     @staticmethod
     def atualizar(id: int, dados: dict):
@@ -262,6 +269,12 @@ class NotaFiscal:
                 f"Só é possível excluir notas em Rascunho. "
                 f"Esta está com status '{nota['status']}'."
             )
+        from core.audit import Audit
+        Audit.delete("notas_fiscais", id, {
+            "tipo": nota.get("tipo"), "numero": nota.get("numero"),
+            "terceiro_nome": nota.get("terceiro_nome"),
+            "total_nf": nota.get("total_nf"),
+        }, modulo="fiscal")
         _db().execute("DELETE FROM notas_fiscais_itens WHERE nota_id=?", (id,))
         _db().execute("DELETE FROM notas_fiscais WHERE id=?", (id,))
 

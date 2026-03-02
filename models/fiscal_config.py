@@ -231,6 +231,8 @@ class FiscalConfig:
                 "INSERT INTO fiscal_fechamentos (competencia,status,fechado_em,fechado_por,obs) VALUES(?,?,?,?,?)",
                 (comp, "FECHADO", agora, usuario, obs)
             )
+        from core.audit import Audit
+        Audit.periodo_fiscal("FECHAR_PERIODO", comp, obs)
 
     @staticmethod
     def reabrir(ano: int, mes: int, usuario: str, obs: str = ""):
@@ -240,6 +242,8 @@ class FiscalConfig:
             "UPDATE fiscal_fechamentos SET status='ABERTO',reaberto_em=?,reaberto_por=?,obs=? WHERE competencia=?",
             (agora, usuario, obs, comp)
         )
+        from core.audit import Audit
+        Audit.periodo_fiscal("REABRIR_PERIODO", comp, obs)
 
     @staticmethod
     def cfop_para_form(tipo_op: str, situacao: str = None) -> list[dict]:
