@@ -1,5 +1,3 @@
-
-
 import tkinter as tk
 from config import THEME, FONT, APP_NAME
 from core.session import Session
@@ -93,29 +91,37 @@ class MainWindow:
         itens = [
             {"id": "dashboard", "texto": "⊞  Dashboard", "cmd": self._abrir_dashboard},
         ]
+
+        # ── PDV ──
         if pode("pdv", "ver"):
-            itens.append({"id": "pdv", "texto": "🛒  PDV — Frente de Caixa", "cmd": self._em_breve})
+            itens.append(None)
+            itens.append({"id": "pdv",   "texto": "🛒  PDV — Frente de Caixa", "cmd": self._abrir_pdv})
+            itens.append({"id": "mesas", "texto": "🍽️  Mesas / Comandas",      "cmd": self._abrir_mesas})
+            itens.append({"id": "caixa", "texto": "💵  Controle de Caixa",     "cmd": self._abrir_caixa})
+
         itens.append(None)
         if pode("produtos", "ver"):
-            itens.append({"id": "produtos", "texto": "📦  Produtos", "cmd": self._abrir_produtos})
+            itens.append({"id": "produtos",     "texto": "📦  Produtos",      "cmd": self._abrir_produtos})
         if pode("clientes", "ver"):
-            itens.append({"id": "clientes", "texto": "👥  Clientes", "cmd": self._abrir_clientes})
+            itens.append({"id": "clientes",     "texto": "👥  Clientes",      "cmd": self._abrir_clientes})
         if pode("fornecedores", "ver"):
-            itens.append({"id": "fornecedores", "texto": "🏭  Fornecedores", "cmd": self._abrir_fornecedores})
+            itens.append({"id": "fornecedores", "texto": "🏭  Fornecedores",  "cmd": self._abrir_fornecedores})
         if pode("estoque", "ver"):
-            itens.append({"id": "estoque", "texto": "📊  Estoque", "cmd": self._abrir_estoque})
+            itens.append({"id": "estoque",      "texto": "📊  Estoque",       "cmd": self._abrir_estoque})
         if pode("fiscal", "ver"):
-            itens.append({"id": "fiscal", "texto": "🧾  Notas Fiscais", "cmd": self._abrir_fiscal})
+            itens.append({"id": "fiscal",       "texto": "🧾  Notas Fiscais", "cmd": self._abrir_fiscal})
         itens.append(None)
         if pode("financeiro", "ver"):
-            itens.append({"id": "financeiro", "texto": "💰  Financeiro", "cmd": self._em_breve})
+            itens.append({"id": "financeiro",   "texto": "💰  Financeiro",    "cmd": self._em_breve})
         if pode("relatorios", "ver"):
-            itens.append({"id": "relatorios", "texto": "📈  Relatórios", "cmd": self._em_breve})
+            itens.append({"id": "relatorios",   "texto": "📈  Relatórios",    "cmd": self._em_breve})
+        if pode("licenca", "ver"):
+            itens.append({"id": "licenca",      "texto": "📋  Licenças",      "cmd": self._abrir_licencas})
         if Session.is_admin_global():
-            itens.append({"id": "fiscal_gestao", "texto": "⚖️  Gestão Fiscal", "cmd": self._abrir_gestao_fiscal})
+            itens.append({"id": "fiscal_gestao","texto": "⚖️  Gestão Fiscal", "cmd": self._abrir_gestao_fiscal})
         if Session.is_admin_global() or pode("admin", "ver"):
             itens.append(None)
-            itens.append({"id": "admin", "texto": "⚙  Administração", "cmd": self._abrir_admin})
+            itens.append({"id": "admin",        "texto": "⚙  Administração",  "cmd": self._abrir_admin})
         return itens
 
     def _build_topbar(self):
@@ -136,6 +142,8 @@ class MainWindow:
         for w in self._conteudo.winfo_children():
             w.destroy()
 
+    # ── Navegação existente ───────────────────────────────────
+
     def _abrir_dashboard(self):
         self._limpar()
         self._set_ativo("dashboard", "Dashboard")
@@ -148,15 +156,17 @@ class MainWindow:
         from views.admin.admin_view import AdminView
         AdminView(self._conteudo)
 
-
     def _abrir_produtos(self):
         self._limpar()
         self._set_ativo("produtos", "Produtos")
         from views.produtos.produtos_view import ProdutosView
         ProdutosView(self._conteudo)
 
-
-
+    def _abrir_licencas(self):
+        self._limpar()
+        self._set_ativo("licenca", "Licenças")
+        from views.fiscal.licenca_view import TelaLicenca
+        TelaLicenca(self._conteudo)
 
     def _abrir_fiscal_config(self):
         self._limpar()
@@ -200,6 +210,43 @@ class MainWindow:
         from views.fornecedores.fornecedores_view import FornecedoresView
         FornecedoresView(self._conteudo)
 
+    # ── PDV (novos) ───────────────────────────────────────────
+
+    def _abrir_pdv(self):
+        """Abre o PDV varejo. Verifica se operador tem caixa aberto."""
+        from models.caixa import Caixa
+        # Session.usuario() retorna o dict do usuário logado
+        usuario = Session.usuario()
+        usuario_id = usuario.get("id")
+
+        caixa = Caixa.aberto_do_operador(usuario_id)
+        if not caixa:
+            from tkinter import messagebox
+            if not messagebox.askyesno(
+                "Caixa não aberto",
+                "Você não tem um caixa aberto.\nDeseja abrir o caixa agora?",
+                parent=self._root,
+            ):
+                return
+            self._abrir_caixa()
+            return
+        from views.pdv.pdv_view import PDVView
+        PDVView(self._root, caixa)
+
+    def _abrir_mesas(self):
+        self._limpar()
+        self._set_ativo("mesas", "Mesas / Comandas")
+        from views.pdv.mesas_view import MesasView
+        MesasView(self._conteudo).pack(fill="both", expand=True)
+
+    def _abrir_caixa(self):
+        self._limpar()
+        self._set_ativo("caixa", "Controle de Caixa")
+        from views.pdv.caixa_view import CaixaView
+        CaixaView(self._conteudo).pack(fill="both", expand=True)
+
+    # ── Utilitários ───────────────────────────────────────────
+
     def _em_breve(self):
         self._limpar()
         tk.Label(self._conteudo, text="🚧  Módulo em desenvolvimento",
@@ -210,4 +257,4 @@ class MainWindow:
         from tkinter import messagebox
         if messagebox.askyesno("Sair", "Deseja encerrar a sessão?", parent=self._root):
             Auth.logout()
-            self._root.destroy()            
+            self._root.destroy()

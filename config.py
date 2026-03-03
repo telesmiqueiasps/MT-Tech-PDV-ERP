@@ -28,6 +28,7 @@ THEME = {
     "primary":      "#2E86C1",
     "primary_dark": "#2C78AC",
     "primary_light":"#D6EAF8",
+    "secondary":    "#5D6D7E",   # usado nas views PDV
     # Status
     "success":      "#1E8449",
     "success_light":"#D5F5E3",
@@ -46,19 +47,23 @@ THEME = {
 }
 
 FONT = {
-    "xs":    ("Segoe UI", 9),
-    "sm":    ("Segoe UI", 10),
-    "md":    ("Segoe UI", 11),
-    "lg":    ("Segoe UI", 13),
-    "xl":    ("Segoe UI", 16),
-    "bold":  ("Segoe UI", 11, "bold"),
-    "title": ("Segoe UI", 16, "bold"),
-    "mono":  ("Consolas", 10),
+    "xs":      ("Segoe UI", 9),
+    "sm":      ("Segoe UI", 10),
+    "md":      ("Segoe UI", 11),
+    "md_bold": ("Segoe UI", 11, "bold"),  # novo
+    "lg":      ("Segoe UI", 13),
+    "lg_bold": ("Segoe UI", 13, "bold"),  # novo
+    "xl":      ("Segoe UI", 16),
+    "xl_bold": ("Segoe UI", 16, "bold"),  # novo - total PDV
+    "bold":    ("Segoe UI", 11, "bold"),
+    "title":   ("Segoe UI", 16, "bold"),
+    "mono":    ("Consolas", 10),
 }
 
 # ── Permissões ────────────────────────────────────────────────
 PERMISSOES = {
-    "pdv":          ["ver", "vender", "desconto", "cancelar"],
+    "pdv":          ["ver", "vender", "desconto", "cancelar",
+                     "abrir_caixa", "fechar_caixa", "sangria", "mesas"],
     "produtos":     ["ver", "criar", "editar", "deletar"],
     "clientes":     ["ver", "criar", "editar", "deletar"],
     "fornecedores": ["ver", "criar", "editar", "deletar"],
@@ -68,4 +73,5 @@ PERMISSOES = {
     "relatorios":   ["ver", "exportar"],
     "admin":        ["ver", "usuarios", "perfis", "empresas"],
     "fiscal_cfg":   ["ver", "criar", "editar", "deletar"],
+    "licenca":      ["ver", "criar", "editar", "deletar"],
 }

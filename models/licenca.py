@@ -33,7 +33,8 @@ from pathlib import Path
 # Nunca exponha esta chave no repositório público.
 _HMAC_SECRET = b"SEU_SEGREDO_PRIVADO_TROQUE_ANTES_DE_DISTRIBUIR_2026"
 _LICENCA_FILE = Path.home() / ".pdverp" / "licenca.json"
-_SERVIDOR_URL = "https://licenca.seu-sistema.com.br"  # implemente quando tiver servidor
+_SERVIDOR_URL       = "https://servidor-licencas-mttech.onrender.com"  # troque após deploy
+ADMIN_API_KEY_LOCAL  = "rnd_VkJFADzYojW59iBQbXeXLa4Syn0w"  # uso interno no PDV
 
 
 # ═══════════════════════════════════════════════════════════════

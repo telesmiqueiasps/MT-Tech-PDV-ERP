@@ -56,11 +56,9 @@ class Conexao:
         self._conn.commit()
 
     def criar_tabela_migrations(self) -> None:
-        # Verifica se a tabela existe com a coluna correta
         try:
             self._conn.execute("SELECT nome FROM _migrations LIMIT 1")
         except sqlite3.OperationalError:
-            # Tabela não existe ou tem estrutura errada — recria
             self._conn.execute("DROP TABLE IF EXISTS _migrations")
             self._conn.execute(
                 "CREATE TABLE _migrations "
@@ -68,24 +66,6 @@ class Conexao:
                 " aplicada_em TEXT DEFAULT (datetime('now','localtime')))"
             )
             self._conn.commit()
-
-    def executescript_seguro(self, sql: str) -> None:
-        """
-        Executa cada statement individualmente, ignorando erros de
-        coluna duplicada (duplicate column) — necessário para ALTER TABLE
-        em SQLite sem suporte a IF NOT EXISTS.
-        """
-        statements = [s.strip() for s in sql.split(";") if s.strip()]
-        for stmt in statements:
-            try:
-                self._conn.execute(stmt)
-                self._conn.commit()
-            except sqlite3.OperationalError as e:
-                msg = str(e).lower()
-                # Ignora apenas erros de coluna já existente
-                if "duplicate column" in msg:
-                    continue
-                raise
 
     def close(self):
         self._conn.close()
@@ -117,6 +97,12 @@ class DatabaseManager:
         return cls._master
 
     @classmethod
+    def empresa(cls) -> Conexao:
+        if not cls._empresa:
+            raise DatabaseError("Nenhuma empresa conectada.")
+        return cls._empresa
+
+    @classmethod
     def fechar_empresa(cls):
         if cls._empresa:
             try:
@@ -126,18 +112,17 @@ class DatabaseManager:
             cls._empresa = None
 
     @classmethod
-    def empresa(cls) -> Conexao:
-        if not cls._empresa:
-            raise DatabaseError("Nenhuma empresa conectada.")
-        return cls._empresa
-
-    @classmethod
     def _aplicar_migrations(cls, db: Conexao, tipo: str):
         """
         Aplica cada migration apenas uma vez, rastreando pelo nome do arquivo
         na tabela _migrations do próprio banco.
-        Executa SEMPRE statement por statement para evitar problemas com
-        COMMIT implícito do executescript do SQLite.
+
+        Regras de tolerância por tipo de statement:
+          - ALTER TABLE  → ignora "duplicate column name"
+          - CREATE TABLE → ignora "already exists" (redundante com IF NOT EXISTS, mas seguro)
+          - CREATE INDEX → ignora "already exists"
+          - INSERT OR IGNORE → nunca falha por duplicata
+          - Qualquer outro erro → relança com contexto
         """
         db.criar_tabela_migrations()
 
@@ -150,25 +135,45 @@ class DatabaseManager:
                 continue
 
             sql        = arq.read_text(encoding="utf-8")
-            statements = [s.strip() for s in sql.split(";") if s.strip()]
+            # Split por ; mas ignora linhas que são só comentário
+            statements = []
+            for s in sql.split(";"):
+                s = s.strip()
+                # Remove linhas de comentário puras antes de verificar se vazio
+                linhas_reais = [l for l in s.splitlines() if l.strip() and not l.strip().startswith("--")]
+                if linhas_reais:
+                    statements.append(s)
 
             for stmt in statements:
+                # Pega apenas a primeira linha não-comentário para classificar o stmt
+                primeira_linha = ""
+                for linha in stmt.splitlines():
+                    linha_strip = linha.strip()
+                    if linha_strip and not linha_strip.startswith("--"):
+                        primeira_linha = linha_strip.upper()
+                        break
+
                 try:
                     db._conn.execute(stmt)
                     db._conn.commit()
                 except sqlite3.OperationalError as e:
                     msg = str(e).lower()
-                    stmt_upper = stmt.upper().lstrip()
-                    # Para ALTER TABLE: ignora coluna duplicada
-                    if stmt_upper.startswith("ALTER TABLE") and "duplicate column" in msg:
+
+                    # ALTER TABLE: ignora coluna já existente
+                    if primeira_linha.startswith("ALTER TABLE") and "duplicate column" in msg:
                         continue
-                    # Para CREATE TABLE/INDEX: ignora "already exists"
-                    if any(stmt_upper.startswith(p) for p in ("CREATE TABLE", "CREATE INDEX", "CREATE UNIQUE")) and "already exists" in msg:
+
+                    # CREATE TABLE / INDEX: ignora se já existe
+                    if (primeira_linha.startswith("CREATE TABLE") or
+                            primeira_linha.startswith("CREATE INDEX") or
+                            primeira_linha.startswith("CREATE UNIQUE INDEX")) \
+                            and "already exists" in msg:
                         continue
-                    # INSERT OR IGNORE nunca deve falhar por isso
+
+                    # Qualquer outro erro: relança com contexto útil
                     raise sqlite3.OperationalError(
                         f"Migration '{nome}' falhou:\n"
-                        f"Statement: {stmt[:200]}\n"
+                        f"Statement: {stmt[:300]}\n"
                         f"Erro: {e}"
                     ) from e
 

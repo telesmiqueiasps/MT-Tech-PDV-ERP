@@ -48,3 +48,9 @@ class AdminView(tk.Frame):
         from views.admin.aba_perfis import AbaPerfis
         aba_prf = AbaPerfis(self._notebook)
         self._notebook.add(aba_prf, text="🔑  Perfis & Permissões")
+
+        # Aba Licenças (só admin global)
+        if Session.is_admin_global():
+            from views.admin.aba_licencas import AbaLicencas
+            aba_lic = AbaLicencas(self._notebook)
+            self._notebook.add(aba_lic, text="📋  Licenças")
