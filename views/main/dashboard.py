@@ -51,7 +51,7 @@ class Dashboard(tk.Frame):
             hoje = date.today().isoformat()
             vendas = db.fetchone(
                 "SELECT COUNT(*) as total, COALESCE(SUM(total),0) as valor "
-                "FROM vendas WHERE DATE(criado_em)=? AND status='finalizada'", (hoje,)
+                "FROM vendas WHERE DATE(criado_em)=? AND status='FINALIZADA'", (hoje,)
             ) or {"total": 0, "valor": 0}
             produtos = db.fetchone(
                 "SELECT COUNT(*) as total FROM produtos WHERE ativo=1"

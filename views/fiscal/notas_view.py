@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 from config import THEME, FONT
 from views.base_view import BaseView
 from views.widgets.tabela import Tabela
@@ -164,7 +164,7 @@ class AbaNota(tk.Frame):
         id_ = self._sel_id()
         if not id_:
             messagebox.showwarning("Atenção", "Selecione uma nota.", parent=self); return
-        motivo = tk.simpledialog.askstring(
+        motivo = simpledialog.askstring(
             "Motivo do Cancelamento",
             "Informe o motivo do cancelamento:",
             parent=self
@@ -244,7 +244,7 @@ class AbaNota(tk.Frame):
                 f"Só é possível estornar notas AUTORIZADAS.\n"
                 f"Status atual: {nota['status']}.", parent=self)
             return
-        motivo = tk.simpledialog.askstring(
+        motivo = simpledialog.askstring(
             "Motivo do Estorno",
             "Informe o motivo do estorno (obrigatório):",
             parent=self

@@ -28,12 +28,37 @@ class Mesa:
         _db().execute("UPDATE mesas SET status=? WHERE id=?", (status, mesa_id))
 
     @staticmethod
+    def proximo_numero():
+        r = _db().fetchone("SELECT COALESCE(MAX(numero),0)+1 AS prox FROM mesas")
+        return r["prox"] if r else 1
+
+    @staticmethod
     def criar(numero, nome, capacidade=4, setor="Salao"):
         return _db().execute("INSERT INTO mesas (numero,nome,capacidade,setor) VALUES (?,?,?,?)", (numero, nome, capacidade, setor))
 
     @staticmethod
     def editar(mesa_id, numero, nome, capacidade, setor):
         _db().execute("UPDATE mesas SET numero=?,nome=?,capacidade=?,setor=? WHERE id=?", (numero, nome, capacidade, setor, mesa_id))
+
+    @staticmethod
+    def reservar(mesa_id, obs=""):
+        _db().execute("UPDATE mesas SET status='RESERVADA', reserva_obs=? WHERE id=?", (obs, mesa_id))
+
+    @staticmethod
+    def liberar(mesa_id):
+        _db().execute("UPDATE mesas SET status='LIVRE', reserva_obs='' WHERE id=?", (mesa_id,))
+
+    @staticmethod
+    def inativar(mesa_id):
+        _db().execute("UPDATE mesas SET ativo=0, status='INATIVA' WHERE id=?", (mesa_id,))
+
+    @staticmethod
+    def ativar(mesa_id):
+        _db().execute("UPDATE mesas SET ativo=1, status='LIVRE' WHERE id=?", (mesa_id,))
+
+    @staticmethod
+    def deletar(mesa_id):
+        _db().execute("DELETE FROM mesas WHERE id=?", (mesa_id,))
 
     @staticmethod
     def pedido_aberto(mesa_id):

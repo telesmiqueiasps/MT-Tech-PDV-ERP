@@ -39,6 +39,25 @@ class Assets:
                 pass
 
     @classmethod
+    def setup_toplevel(cls, janela: tk.Toplevel, largura: int, altura: int):
+        """Aplica ícone, centraliza na tela e traz a janela para o foco."""
+        cls.icon(janela)
+        # Esconde temporariamente para evitar flash na posição padrão (0,0)
+        janela.withdraw()
+        janela.update_idletasks()
+        sw = janela.winfo_screenwidth()
+        sh = janela.winfo_screenheight()
+        x = (sw - largura) // 2
+        y = max(0, (sh - altura) // 2)
+        janela.geometry("{}x{}+{}+{}".format(largura, altura, x, y))
+        janela.deiconify()
+        # No Windows focus_force sozinho não garante foco; -topmost temporário resolve
+        janela.attributes("-topmost", True)
+        janela.lift()
+        janela.focus_force()
+        janela.after(150, lambda: janela.attributes("-topmost", False))
+
+    @classmethod
     def logo(cls, largura: int = None, altura: int = None) -> tk.PhotoImage | None:
         return cls._carregar("_logo", "logo.png", largura, altura)
 

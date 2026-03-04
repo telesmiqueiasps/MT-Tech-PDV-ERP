@@ -63,7 +63,7 @@ FONT = {
 # ── Permissões ────────────────────────────────────────────────
 PERMISSOES = {
     "pdv":          ["ver", "vender", "desconto", "cancelar",
-                     "abrir_caixa", "fechar_caixa", "sangria", "mesas"],
+                     "abrir_caixa", "fechar_caixa", "sangria", "mesas", "vendas"],
     "produtos":     ["ver", "criar", "editar", "deletar"],
     "clientes":     ["ver", "criar", "editar", "deletar"],
     "fornecedores": ["ver", "criar", "editar", "deletar"],

@@ -43,7 +43,9 @@ class Caixa:
         _db().execute("INSERT INTO caixa_movimentos (caixa_id,tipo,valor,descricao,usuario_id,usuario_nome) VALUES (?,'SUPRIMENTO',?,?,?,?)", (caixa_id,abs(valor),descricao or "Suprimento",usuario_id,usuario_nome))
     @staticmethod
     def saldo_atual(caixa_id):
-        r = _db().fetchone("SELECT COALESCE(SUM(valor),0) AS t FROM caixa_movimentos WHERE caixa_id=?", (caixa_id,))
+        r = _db().fetchone(
+            "SELECT COALESCE(SUM(valor),0) AS t FROM caixa_movimentos "
+            "WHERE caixa_id=? AND tipo != 'FECHAMENTO'", (caixa_id,))
         return float(r["t"]) if r else 0.0
     @staticmethod
     def movimentos(caixa_id):

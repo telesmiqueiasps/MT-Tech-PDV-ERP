@@ -11,10 +11,11 @@ class PedidoView(tk.Toplevel):
         self.pedido  = pedido
         self.on_close = on_close
         self.title("Mesa {} — Pedido #{}".format(mesa["nome"], pedido["numero"]))
-        self.geometry("900x650")
         self.protocol("WM_DELETE_WINDOW", self._fechar)
         self._build()
         self._atualizar()
+        from assets import Assets
+        Assets.setup_toplevel(self, 900, 650)
 
     def _build(self):
         self.configure(bg=THEME["bg"])
@@ -36,22 +37,41 @@ class PedidoView(tk.Toplevel):
         self._lista.pack(fill="x")
         self._lista.bind("<Double-Button-1>", lambda e: self._add_selecionado())
         self._prods = []
+        self._saldos = []
 
     def _buscar(self):
         from models.produto import Produto
-        self._prods = Produto.buscar(self._busca_var.get().strip(), limite=15)
-        self._lista.delete(0,"end")
-        for p in self._prods:
-            self._lista.insert("end","  [{}]  {}  R$ {:.2f}".format(p.get("codigo",""),p.get("nome",""),float(p.get("preco_venda",0))))
-        if len(self._prods)==1: self._add_selecionado()
+        from models.estoque import Estoque
+        self._prods = Produto.listar(busca=self._busca_var.get().strip())[:15]
+        self._saldos = [Estoque.saldo_total_produto(p["id"]) for p in self._prods]
+        self._lista.delete(0, "end")
+        for i, p in enumerate(self._prods):
+            saldo = self._saldos[i]
+            label = "  [{}]  {:<28s}  R$ {:>7.2f}   Estoque: {:g}".format(
+                p.get("codigo", ""), p.get("nome", "")[:28],
+                float(p.get("preco_venda", 0)), saldo)
+            self._lista.insert("end", label)
+            if saldo <= 0:
+                self._lista.itemconfig(i, fg="#f5365c")
+        if len(self._prods) == 1: self._add_selecionado()
         elif self._prods: self._lista.selection_set(0); self._lista.focus()
 
     def _add_selecionado(self):
         idx = self._lista.curselection()
         if not idx: return
         prod = self._prods[idx[0]]
-        qtd = simpledialog.askfloat("Quantidade","Quantidade:", initialvalue=1, minvalue=0.001)
+        saldo = self._saldos[idx[0]] if idx[0] < len(self._saldos) else 0.0
+        qtd = simpledialog.askfloat(
+            "Quantidade",
+            "Quantidade:  (estoque: {:g})".format(saldo),
+            initialvalue=1, minvalue=0.001)
         if not qtd: return
+        if qtd > saldo:
+            messagebox.showwarning(
+                "Estoque insuficiente",
+                "Produto '{}': saldo disponível {:g}, solicitado {:g}.".format(
+                    prod.get("nome", ""), saldo, qtd))
+            return
         obs = simpledialog.askstring("Observacao","Obs para cozinha (opcional):") or ""
         from models.mesa import Pedido
         Pedido.adicionar_item(self.pedido["id"], prod, qtd, obs)
@@ -74,6 +94,7 @@ class PedidoView(tk.Toplevel):
         self._lbl_total = tk.Label(pai, text="Total: R$ 0,00", bg=THEME["bg_card"], font=FONT["xl_bold"], fg=THEME["primary"])
         self._lbl_total.pack(pady=8)
         tk.Button(pai, text="Imprimir cozinha", command=self._imprimir_cozinha, bg=THEME["warning"], fg="white", font=FONT["sm"], relief="flat").pack(fill="x", padx=10, pady=4)
+        tk.Button(pai, text="Imprimir conta", command=self._imprimir_conta, bg=THEME["secondary"], fg="white", font=FONT["sm"], relief="flat").pack(fill="x", padx=10, pady=2)
         tk.Button(pai, text="Desconto no pedido", command=self._desconto, bg=THEME["secondary"], fg="white", font=FONT["sm"], relief="flat").pack(fill="x", padx=10, pady=2)
         tk.Button(pai, text="Dividir conta", command=self._dividir, bg=THEME["secondary"], fg="white", font=FONT["sm"], relief="flat").pack(fill="x", padx=10, pady=2)
         tk.Button(pai, text="FECHAR E PAGAR", command=self._fechar_pedido, bg=THEME["success"], fg="white", font=FONT["bold"], relief="flat", pady=8).pack(fill="x", padx=10, pady=(12,4))
@@ -125,6 +146,30 @@ class PedidoView(tk.Toplevel):
         Pedido.marcar_impresso(self.pedido["id"])
         self._atualizar()
 
+    def _imprimir_conta(self):
+        from models.mesa import Pedido
+        itens = Pedido.itens(self.pedido["id"])
+        if not itens:
+            messagebox.showinfo("Conta", "Pedido sem itens para imprimir.")
+            return
+        ped = Pedido.buscar_por_id(self.pedido["id"]) or self.pedido
+        try:
+            from core.database import DatabaseManager
+            from core.session import Session
+            empresa = DatabaseManager.master().fetchone(
+                "SELECT * FROM empresas WHERE id=?", (Session.empresa()["id"],)) or {}
+        except Exception:
+            empresa = {}
+        try:
+            from services.cupom import gerar_conta_mesa
+            import subprocess, sys
+            path = gerar_conta_mesa(ped, itens, self.mesa, empresa)
+            if sys.platform == "win32": subprocess.Popen(["start", "", path], shell=True)
+            elif sys.platform == "darwin": subprocess.Popen(["open", path])
+            else: subprocess.Popen(["xdg-open", path])
+        except Exception as e:
+            messagebox.showerror("Erro ao imprimir conta", str(e))
+
     def _desconto(self):
         val = simpledialog.askfloat("Desconto","Desconto em R$:",minvalue=0)
         if val:
@@ -144,17 +189,25 @@ class PedidoView(tk.Toplevel):
         itens = Pedido.itens(self.pedido["id"])
         if not itens: messagebox.showwarning("Aviso","Pedido sem itens."); return
         Pedido.fechar(self.pedido["id"])
-        # Abre tela de pagamento PDV
         from views.pdv.caixa_view import selecionar_caixa
         caixa = selecionar_caixa(self)
-        if not caixa: return
+        if not caixa:
+            # Desfaz o fechar se o operador cancelou a seleção de caixa
+            from core.database import DatabaseManager
+            DatabaseManager.empresa().execute(
+                "UPDATE pedidos SET status='ABERTO', fechado_em=NULL WHERE id=?",
+                (self.pedido["id"],))
+            return
         sess = Session.usuario()
-        venda_id = Pedido.converter_para_venda(self.pedido["id"],caixa["id"],sess.get("id"),sess.get("nome", ""))
+        venda_id = Pedido.converter_para_venda(
+            self.pedido["id"], caixa["id"], sess.get("id"), sess.get("nome", ""))
         Pedido.pagar(self.pedido["id"])
-        from views.pdv.pdv_view import PDVView
-        messagebox.showinfo("Pedido fechado","Venda criada! Finalize o pagamento no PDV.")
+        master = self.master
         self.destroy()
         if self.on_close: self.on_close()
+        # Abre o PDV diretamente com a venda já montada para pagamento
+        from views.pdv.pdv_view import PDVView
+        PDVView(master, caixa, venda_id=venda_id)
 
     def _cancelar(self):
         if not messagebox.askyesno("Cancelar","Cancelar o pedido desta mesa?"): return

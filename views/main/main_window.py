@@ -98,6 +98,7 @@ class MainWindow:
             itens.append({"id": "pdv",   "texto": "🛒  PDV — Frente de Caixa", "cmd": self._abrir_pdv})
             itens.append({"id": "mesas", "texto": "🍽️  Mesas / Comandas",      "cmd": self._abrir_mesas})
             itens.append({"id": "caixa", "texto": "💵  Controle de Caixa",     "cmd": self._abrir_caixa})
+            itens.append({"id": "vendas", "texto": "🧾  Vendas",     "cmd": self._abrir_vendas})
 
         itens.append(None)
         if pode("produtos", "ver"):
@@ -244,6 +245,12 @@ class MainWindow:
         self._set_ativo("caixa", "Controle de Caixa")
         from views.pdv.caixa_view import CaixaView
         CaixaView(self._conteudo).pack(fill="both", expand=True)
+
+    def _abrir_vendas(self):
+        self._limpar()
+        self._set_ativo("vendas", "Vendas")
+        from views.pdv.vendas_view import VendasView
+        VendasView(self._conteudo).pack(fill="both", expand=True)
 
     # ── Utilitários ───────────────────────────────────────────
 

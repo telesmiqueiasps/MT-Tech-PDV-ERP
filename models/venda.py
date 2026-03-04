@@ -163,11 +163,12 @@ class Venda:
             (_agora(), venda_id))
         for item in Venda.itens(venda_id):
             try:
-                from models.estoque import EstoqueMovimento
-                EstoqueMovimento.saida(
-                    produto_id=item["produto_id"], deposito_id=None,
-                    quantidade=item["quantidade"], motivo="VENDA_PDV",
-                    ref_id=venda_id, ref_tipo="venda")
+                from models.estoque import Estoque
+                Estoque.saida(
+                    produto_id=item["produto_id"], deposito_id=1,
+                    quantidade=float(item["quantidade"]), motivo="VENDA_PDV",
+                    usuario_id=venda.get("operador_id"),
+                    usuario_nome=venda.get("operador_nome"))
             except Exception:
                 pass
         if venda.get("caixa_id"):
@@ -195,6 +196,13 @@ class Venda:
         from core.audit import Audit
         Audit.delete("vendas", venda_id,
                      {"numero": v["numero"], "motivo": motivo}, modulo="pdv")
+
+    @staticmethod
+    def deletar(venda_id):
+        """Remove completamente uma venda sem deixar histórico (apenas vendas ABERTA sem itens)."""
+        _db().execute("DELETE FROM venda_itens WHERE venda_id=?", (venda_id,))
+        _db().execute("DELETE FROM venda_pagamentos WHERE venda_id=?", (venda_id,))
+        _db().execute("DELETE FROM vendas WHERE id=?", (venda_id,))
 
     @staticmethod
     def listar(caixa_id=None, data=None, status=None, limite=200):
