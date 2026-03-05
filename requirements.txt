@@ -1,0 +1,8 @@
+# PDV ERP — dependências externas
+# Python >= 3.11  (usa tkinter da stdlib, sqlite3 da stdlib)
+
+# Manipulação de imagens (logo, assets visuais)
+Pillow>=10.1.0
+
+# Geração de PDF (relatório de caixa, DANFE, cupom)
+reportlab>=4.2.5

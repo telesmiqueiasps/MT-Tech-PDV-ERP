@@ -29,6 +29,15 @@ class Assets:
                 root.iconbitmap(cls._ico_path)
             except Exception:
                 pass
+            # Aplica ícone automaticamente em todos os Toplevel ao serem exibidos,
+            # incluindo simpledialog e messagebox, sem precisar de acesso direto.
+            ico_path = cls._ico_path
+            def _auto_icon(event):
+                try:
+                    event.widget.iconbitmap(ico_path)
+                except Exception:
+                    pass
+            root.bind_class("Toplevel", "<Map>", _auto_icon, add=True)
 
     @classmethod
     def icon(cls, janela: tk.Toplevel | tk.Tk):

@@ -56,5 +56,6 @@ class Caixa:
         tv = _db().fetchone("SELECT COUNT(*) AS qtd, COALESCE(SUM(total),0) AS total FROM vendas WHERE caixa_id=? AND status='FINALIZADA'", (caixa_id,)) or {"qtd":0,"total":0}
         canc = (_db().fetchone("SELECT COUNT(*) AS qtd FROM vendas WHERE caixa_id=? AND status='CANCELADA'", (caixa_id,)) or {}).get("qtd",0)
         movs = _db().fetchall("SELECT tipo, SUM(valor) AS total FROM caixa_movimentos WHERE caixa_id=? AND tipo IN ('SANGRIA','SUPRIMENTO') GROUP BY tipo", (caixa_id,))
-        desc = (_db().fetchone("SELECT COALESCE(SUM(desconto_valor),0) AS t FROM vendas WHERE caixa_id=? AND status='FINALIZADA'", (caixa_id,)) or {}).get("t",0)
-        return {"caixa":Caixa.buscar_por_id(caixa_id) or {},"por_forma":por_forma,"total_vendas":tv,"qtd_canceladas":canc,"movimentos":movs,"total_descontos":float(desc),"saldo_sistema":Caixa.saldo_atual(caixa_id)}
+        desc  = (_db().fetchone("SELECT COALESCE(SUM(desconto_valor),0) AS t FROM vendas WHERE caixa_id=? AND status='FINALIZADA'", (caixa_id,)) or {}).get("t",0)
+        troco = (_db().fetchone("SELECT COALESCE(SUM(troco),0) AS t FROM vendas WHERE caixa_id=? AND status='FINALIZADA'", (caixa_id,)) or {}).get("t",0)
+        return {"caixa":Caixa.buscar_por_id(caixa_id) or {},"por_forma":por_forma,"total_vendas":tv,"qtd_canceladas":canc,"movimentos":movs,"total_descontos":float(desc),"total_troco":float(troco),"saldo_sistema":Caixa.saldo_atual(caixa_id)}

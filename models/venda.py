@@ -155,6 +155,8 @@ class Venda:
         if not venda: raise ValueError("Venda não encontrada.")
         if venda["status"] != "ABERTA":
             raise ValueError(f"Venda já está {venda['status']}.")
+        if not Venda.itens(venda_id):
+            raise ValueError("Não é possível finalizar uma venda sem produtos.")
         pend = Venda.valor_pendente(venda_id)
         if pend > 0.01:
             raise ValueError(f"Falta R$ {pend:.2f} para finalizar.")
