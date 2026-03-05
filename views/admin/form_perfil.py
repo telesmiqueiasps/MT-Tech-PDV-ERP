@@ -5,7 +5,7 @@ from views.base_view import BaseView
 
 class FormPerfil(BaseView):
     def __init__(self, master, ao_salvar=None):
-        super().__init__(master, "Novo Perfil", 380, 260, modal=True)
+        super().__init__(master, "Novo Perfil", 380, 340, modal=True)
         self.resizable(False, False)
         self._ao_salvar = ao_salvar
         self._build()

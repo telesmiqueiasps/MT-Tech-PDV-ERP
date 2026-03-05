@@ -2,6 +2,7 @@
 Executado na primeira inicialização para criar o admin global
 e os perfis padrão com permissões.
 """
+import re
 from core.database import DatabaseManager
 from core.auth import gerar_hash
 
@@ -12,6 +13,24 @@ def criar_admin_global(login: str, senha: str) -> None:
         "INSERT OR IGNORE INTO admin_global (login, senha_hash) VALUES (?, ?)",
         (login, gerar_hash(senha)),
     )
+
+
+def criar_empresa(nome: str, cnpj: str = "", razao_social: str = "") -> int:
+    from config import DATA_DIR
+    db = DatabaseManager.master()
+
+    slug = re.sub(r"[^\w]", "_", nome.lower())[:30]
+    existing_ids = db.fetchall("SELECT id FROM empresas")
+    suffix = len(existing_ids) + 1
+    db_path = DATA_DIR / f"empresa_{slug}_{suffix}.db"
+
+    empresa_id = db.execute(
+        "INSERT INTO empresas (nome, razao_social, cnpj, db_path) VALUES (?, ?, ?, ?)",
+        (nome, razao_social, cnpj, str(db_path)),
+    )
+
+    DatabaseManager.conectar_empresa(db_path)
+    return empresa_id
 
 
 def admin_existe() -> bool:

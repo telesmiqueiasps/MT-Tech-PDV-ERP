@@ -97,8 +97,14 @@ class LoginView(BaseView):
             lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>",
             lambda e: canvas.itemconfig(self._cards_win, width=e.width))
-        canvas.bind_all("<MouseWheel>",
-            lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+        def _scroll(e):
+            try:
+                canvas.yview_scroll(int(-1*(e.delta/120)), "units")
+            except tk.TclError:
+                pass
+
+        canvas.bind_all("<MouseWheel>", _scroll)
+        canvas.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         self._var_erro = tk.StringVar()
         tk.Label(parent, textvariable=self._var_erro, font=FONT["sm"],
