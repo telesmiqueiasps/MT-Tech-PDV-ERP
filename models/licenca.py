@@ -31,10 +31,25 @@ from pathlib import Path
 
 # ── Constante de segurança — MUDE antes de distribuir ────────
 # Nunca exponha esta chave no repositório público.
-_HMAC_SECRET = b"SEU_SEGREDO_PRIVADO_TROQUE_ANTES_DE_DISTRIBUIR_2026"
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURAÇÃO OBRIGATÓRIA — preencha antes de distribuir o sistema
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. _HMAC_SECRET: mesma string configurada em HMAC_SECRET no Render.
+#    Gere uma boa: python -c "import secrets; print(secrets.token_hex(32))"
+#    NUNCA compartilhe nem commite no GitHub.
+#
+# 2. _SERVIDOR_URL: URL do seu app no Render.
+#    Ex: "https://pdverp-licencas.onrender.com"
+#    Encontre em: Render → seu serviço → URL no topo da página.
+# ─────────────────────────────────────────────────────────────────────────────
+_HMAC_SECRET  = b"0b31d362972369b4b200389821548cbe74b98ae1c032d60005b73958b5d73114"
+_SERVIDOR_URL = "https://servidor-licencas-mttech.onrender.com"  # ajuste para sua URL real
 _LICENCA_FILE = Path.home() / ".pdverp" / "licenca.json"
-_SERVIDOR_URL       = "https://servidor-licencas-mttech.onrender.com"  # troque após deploy
-ADMIN_API_KEY_LOCAL  = "rnd_VkJFADzYojW59iBQbXeXLa4Syn0w"  # uso interno no PDV
+
+# Chave de acesso às rotas administrativas do servidor (/api/admin/*).
+# Deve ser idêntica ao valor de ADMIN_API_KEY configurado no servidor.
+# Gere uma boa: python -c "import secrets; print(secrets.token_hex(32))"
+ADMIN_API_KEY_LOCAL = "Josa1972."
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -216,6 +231,12 @@ class Licenca:
                 Audit.licenca("LICENCA_ASSINATURA_INVALIDA")
                 return
 
+        # Respeita bloqueio registrado pelo servidor em check anterior
+        if dados.get("status") == "BLOQUEADA":
+            cls._status = LicencaStatus.BLOQUEADA
+            cls._motivo = dados.get("motivo_bloqueio") or "Licença bloqueada pelo servidor. Contate o suporte."
+            return
+
         cls._avaliar_validade()
 
         # Check online em background (não bloqueia a inicialização)
@@ -314,6 +335,10 @@ class Licenca:
                 grace = (hoje + datetime.timedelta(days=7)).isoformat()
                 dados["ultimo_check"] = hoje.isoformat()
                 dados["grace_ate"]    = grace
+                # Limpa bloqueio anterior se o servidor confirma validade
+                if dados.get("status") == "BLOQUEADA":
+                    dados.pop("status", None)
+                    dados.pop("motivo_bloqueio", None)
                 if resultado.get("validade_ate"):
                     dados["validade_ate"] = resultado["validade_ate"]
                 if resultado.get("modulos"):
@@ -329,6 +354,7 @@ class Licenca:
                 Audit.licenca("CHECK_FAIL", f"Servidor recusou: {motivo}")
                 if resultado.get("bloquear"):
                     dados["status"] = "BLOQUEADA"
+                    dados["motivo_bloqueio"] = motivo
                     _salvar_local(dados)
                     cls._status = LicencaStatus.BLOQUEADA
                     cls._motivo = motivo
@@ -354,9 +380,10 @@ class Licenca:
         try:
             import urllib.request
             payload = json.dumps({
-                "chave":       chave,
-                "fingerprint": _fingerprint(),
-                "versao":      "1.0.0",
+                "chave":        chave,
+                "fingerprint":  _fingerprint(),
+                "versao":       "1.0.0",
+                "cnpj_empresa": cls._cnpj_context or "",
             }).encode()
             req = urllib.request.Request(
                 f"{_SERVIDOR_URL}/api/v1/ativar",
@@ -399,36 +426,25 @@ class Licenca:
             return True, f"Licença {dados['plano']} ativada com sucesso!"
 
         except Exception as e_online:
-            # Offline — valida HMAC local
-            chave_hash = _assinar_chave(chave)
-            # Sem servidor, não temos como saber o plano — assumimos BASICO
-            # Em produção: o cliente deveria ter acesso ao servidor ao ativar
-            if len(chave.replace("-", "")) >= 24:
-                dados = {
-                    "chave":        chave,
-                    "chave_hash":   chave_hash,
-                    "plano":        "BASICO",
-                    "modulos":      PLANOS["BASICO"]["modulos"],
-                    "max_empresas": 1,
-                    "max_usuarios": 3,
-                    "emitida_em":   datetime.date.today().isoformat(),
-                    "validade_ate": None,
-                    "fingerprint":  _fingerprint(),
-                    "ativada_em":   datetime.date.today().isoformat(),
-                    "ultimo_check": datetime.date.today().isoformat(),
-                    "grace_ate":    (datetime.date.today() +
-                                     datetime.timedelta(days=7)).isoformat(),
-                }
-                _salvar_local(dados)
-                cls._dados  = dados
-                cls._status = LicencaStatus.ATIVA
-                cls._motivo = "Ativado offline — conecte-se para confirmar."
-                from core.audit import Audit
-                Audit.licenca("ATIVACAO_OFFLINE", f"Sem servidor: {e_online}")
-                return True, ("Licença ativada offline.\n"
-                              "Conecte-se à internet nas próximas 7 dias "
-                              "para confirmar a ativação.")
-            return False, "Sem conexão com o servidor. Verifique a internet e tente novamente."
+            # Sem conexão — ativação EXIGE servidor.
+            # Não ativamos offline para evitar burla da licença.
+            from core.audit import Audit
+            Audit.licenca("ATIVACAO_SEM_SERVIDOR", str(e_online)[:120])
+            return False, (
+                "Não foi possível conectar ao servidor de licenças.\n"
+                "Verifique sua conexão com a internet e tente novamente.\n\n"
+                f"Detalhe técnico: {type(e_online).__name__}"
+            )
+
+    @classmethod
+    def verificar_online(cls):
+        """
+        Faz o check com o servidor de forma SÍNCRONA.
+        Chamado no login para garantir que bloqueios aplicados no servidor
+        sejam refletidos imediatamente, sem esperar o thread de background.
+        Silencioso se offline — mantém o estado local.
+        """
+        cls._check_online()
 
     # ── Consultas de estado ───────────────────────────────────
     @classmethod

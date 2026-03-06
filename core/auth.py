@@ -8,6 +8,11 @@ class AuthError(Exception):
     pass
 
 
+class LicencaAuthError(AuthError):
+    """Levantado quando o login falha exclusivamente por problema de licença."""
+    pass
+
+
 def gerar_hash(senha: str) -> str:
     salt = secrets.token_hex(16)
     h    = hashlib.sha256(f"{salt}{senha}".encode()).hexdigest()
@@ -93,13 +98,14 @@ class Auth:
             from models.licenca import Licenca
             cnpj = empresa.get("cnpj") or ""
             Licenca.inicializar(cnpj_empresa=cnpj)
+            Licenca.verificar_online()   # check síncrono: garante bloqueios do servidor
             if not Licenca.ativa():
-                raise AuthError(
+                raise LicencaAuthError(
                     f"Licença inativa: {Licenca.motivo()}\n\n"
-                    "Contate o suporte para renovar."
+                    "Ative ou renove a licença para continuar."
                 )
             if not Licenca.validar_cnpj(cnpj):
-                raise AuthError(
+                raise LicencaAuthError(
                     "Esta licença não está autorizada para esta empresa.\n"
                     f"CNPJ da licença: {Licenca.cnpj_licenciado() or 'não vinculado'}\n"
                     "Contate o suporte."

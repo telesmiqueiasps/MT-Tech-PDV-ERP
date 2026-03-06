@@ -70,10 +70,12 @@ class AbaLicencas(tk.Frame):
         # Botões de ação
         acao = tk.Frame(self, bg=THEME["bg"], padx=16, pady=8)
         acao.pack(fill="x")
-        botao(acao, "📋 Detalhes",  tipo="secundario", command=self._ver_detalhe).pack(side="left")
-        botao(acao, "🚫 Revogar",   tipo="perigo",     command=self._revogar).pack(side="left", padx=(8, 0))
-        botao(acao, "✅ Reativar",   tipo="sucesso",    command=self._reativar).pack(side="left", padx=(8, 0))
-        botao(acao, "🖥 Reset Máq.", tipo="secundario", command=self._reset_maquina).pack(side="left", padx=(8, 0))
+        botao(acao, "📋 Detalhes",      tipo="secundario", command=self._ver_detalhe).pack(side="left")
+        botao(acao, "🔑 Ativar Licença", tipo="sucesso",  command=self._ativar_licenca).pack(side="left", padx=(8, 0))
+        botao(acao, "🚫 Revogar",       tipo="perigo",    command=self._revogar).pack(side="left", padx=(8, 0))
+        botao(acao, "✅ Reativar",       tipo="sucesso",   command=self._reativar).pack(side="left", padx=(8, 0))
+        botao(acao, "🖥 Reset Máq.",    tipo="secundario", command=self._reset_maquina).pack(side="left", padx=(8, 0))
+        botao(acao, "🗑 Excluir",       tipo="perigo",    command=self._excluir).pack(side="right")
 
     def _carregar(self):
         """Tenta buscar licenças do servidor Flask. Se offline, lê dados locais."""
@@ -233,6 +235,50 @@ class AbaLicencas(tk.Frame):
         self._acao_servidor(f"/api/admin/licencas/{l['id']}/resetar-maquina",
                              {"motivo": motivo}, "Vínculo removido.")
 
+    def _excluir(self):
+        l = self._selecionado()
+        if not l:
+            return
+        status = l.get("status", "")
+        permitidos = {"BLOQUEADA", "EXPIRADA", "INVALIDA", "SEM_DADOS"}
+        if status not in permitidos:
+            messagebox.showwarning(
+                "Não permitido",
+                f"Só é possível excluir licenças com status: "
+                f"Bloqueada, Expirada ou Inválida.\n\nStatus atual: {status}",
+                parent=self,
+            )
+            return
+        if not messagebox.askyesno(
+            "Confirmar exclusão",
+            f"Excluir definitivamente a licença de '{l.get('cliente_nome')}'?\n\n"
+            f"Status: {status}\n\n"
+            "Esta ação não pode ser desfeita.",
+            icon="warning",
+            parent=self,
+        ):
+            return
+        try:
+            from models.licenca import _SERVIDOR_URL, ADMIN_API_KEY_LOCAL
+            import urllib.request
+            req = urllib.request.Request(
+                f"{_SERVIDOR_URL}/api/admin/licencas/{l['id']}",
+                headers={"X-Admin-Key": ADMIN_API_KEY_LOCAL,
+                         "Content-Type": "application/json"},
+                method="DELETE",
+            )
+            with urllib.request.urlopen(req, timeout=10):
+                pass
+            messagebox.showinfo("Excluído", "Licença excluída com sucesso.", parent=self)
+            self._carregar()
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao excluir no servidor:\n{e}", parent=self)
+
+    def _ativar_licenca(self):
+        l = self._selecionado()
+        if l:
+            AtivarLicencaModal(self, l, ao_ativar=self._carregar)
+
     def _nova_licenca(self):
         NovaLicencaModal(self, ao_criar=self._carregar)
 
@@ -280,8 +326,10 @@ class DetalheModal(tk.Toplevel):
         super().__init__(master)
         self.title(f"Licença — {licenca.get('cliente_nome','')}")
         self.configure(bg=THEME["bg"])
-        self.geometry("500x560")
         self.grab_set()
+        self.transient(master.winfo_toplevel())
+        from assets import Assets
+        Assets.setup_toplevel(self, 500, 560)
         self._l = licenca
         self._build()
 
@@ -352,8 +400,10 @@ class NovaLicencaModal(tk.Toplevel):
         super().__init__(master)
         self.title("Nova Licença")
         self.configure(bg=THEME["bg"])
-        self.geometry("480x520")
         self.grab_set()
+        self.transient(master.winfo_toplevel())
+        from assets import Assets
+        Assets.setup_toplevel(self, 480, 520)
         self._ao_criar = ao_criar
         self._build()
 
@@ -472,3 +522,193 @@ class NovaLicencaModal(tk.Toplevel):
             self.clipboard_clear()
             self.clipboard_append(self._chave_gerada)
             messagebox.showinfo("Copiado", "Chave copiada!", parent=self)
+
+
+# ════════════════════════════════════════════════════════════════
+# Modal de ativação de licença para uma empresa selecionada
+# ════════════════════════════════════════════════════════════════
+class AtivarLicencaModal(tk.Toplevel):
+    def __init__(self, master, licenca: dict, ao_ativar=None):
+        super().__init__(master)
+        self.title(f"Ativar Licença — {licenca.get('cliente_nome', '')}")
+        self.configure(bg=THEME["bg"])
+        self.grab_set()
+        self.transient(master.winfo_toplevel())
+        from assets import Assets
+        Assets.setup_toplevel(self, 500, 420)
+        self._l        = licenca
+        self._ao_ativar = ao_ativar
+        self._ativando  = False
+        self._build()
+
+    def _build(self):
+        l = self._l
+        status = l.get("status", "—")
+        cor_banner = STATUS_COR.get(status, THEME["primary"])
+
+        # ── Cabeçalho ──────────────────────────────────────
+        hdr = tk.Frame(self, bg=cor_banner, padx=20, pady=14)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="🔑  Ativar Licença",
+                 font=FONT["title"], bg=cor_banner, fg="white").pack(anchor="w")
+        tk.Label(hdr,
+                 text=f"{l.get('cliente_nome', '—')}  •  {AbaLicencas._fmt_cnpj(l.get('cnpj_empresa') or '')}",
+                 font=FONT["sm"], bg=cor_banner, fg="white").pack(anchor="w")
+
+        body = tk.Frame(self, bg=THEME["bg"], padx=24, pady=20)
+        body.pack(fill="both", expand=True)
+
+        # Info do status atual
+        frm_status = tk.Frame(body, bg=THEME["bg_card"],
+                               highlightthickness=1,
+                               highlightbackground=THEME["border"])
+        frm_status.pack(fill="x", pady=(0, 16))
+        tk.Label(frm_status,
+                 text=f"Status atual:  {status}   |   Plano:  {l.get('plano', '—')}",
+                 font=FONT["sm"], bg=THEME["bg_card"],
+                 fg=STATUS_COR.get(status, THEME["fg"]),
+                 padx=12, pady=8).pack(anchor="w")
+
+        # Campo da chave
+        tk.Label(body, text="Chave de licença",
+                 font=FONT["bold"], bg=THEME["bg"], fg=THEME["fg"]).pack(anchor="w")
+        tk.Label(body,
+                 text="Cole abaixo a chave gerada para esta empresa:",
+                 font=FONT["sm"], bg=THEME["bg"], fg=THEME["fg_light"]).pack(anchor="w", pady=(2, 6))
+
+        self._var_chave = tk.StringVar()
+        self._ent_chave = tk.Entry(
+            body, textvariable=self._var_chave,
+            font=("Consolas", 12), relief="flat",
+            bg=THEME["bg_card"], fg=THEME["fg"],
+            insertbackground=THEME["fg"],
+            highlightthickness=2,
+            highlightbackground=THEME["border"],
+            highlightcolor=THEME["primary"],
+        )
+        self._ent_chave.pack(fill="x", ipady=8, pady=(0, 4))
+        self._ent_chave.focus_set()
+
+        tk.Label(body, text="Formato: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX",
+                 font=("Consolas", 8), bg=THEME["bg"],
+                 fg=THEME["fg_light"]).pack(anchor="w", pady=(0, 12))
+
+        # Mensagem de retorno
+        self._var_msg = tk.StringVar()
+        self._lbl_msg = tk.Label(body, textvariable=self._var_msg,
+                                  font=FONT["sm"], bg=THEME["bg"],
+                                  fg=THEME["danger"], wraplength=450,
+                                  justify="left")
+        self._lbl_msg.pack(anchor="w", pady=(0, 8))
+
+        # Botões
+        btn_row = tk.Frame(body, bg=THEME["bg"])
+        btn_row.pack(fill="x")
+        self._btn_ativar = botao(btn_row, "🔑  Ativar",
+                                  tipo="sucesso", command=self._ativar)
+        self._btn_ativar.pack(side="left")
+        botao(btn_row, "Fechar", tipo="secundario",
+              command=self.destroy).pack(side="right")
+
+        self.bind("<Return>", lambda _: self._ativar())
+
+    def _ativar(self):
+        if self._ativando:
+            return
+        chave = self._var_chave.get().strip()
+        if not chave:
+            self._set_msg("Cole a chave de licença antes de ativar.", erro=True)
+            return
+
+        cnpj = (self._l.get("cnpj_empresa") or "").replace(".", "").replace("/", "").replace("-", "")
+
+        self._ativando = True
+        self._btn_ativar.configure(state="disabled", text="⏳  Ativando...")
+        self._set_msg("Conectando ao servidor de licenças...", erro=False)
+        self.update()
+
+        import threading
+        def _worker():
+            try:
+                from models.licenca import (
+                    _SERVIDOR_URL, _salvar_local, _assinar_chave,
+                    Licenca, LicencaStatus, PLANOS,
+                )
+                import urllib.request
+                import json as _json
+                import datetime
+
+                # Ativa no servidor sem fingerprint (admin atua em nome da empresa)
+                payload = _json.dumps({
+                    "chave":        chave,
+                    "fingerprint":  "",   # sem fingerprint — admin não é a máquina do cliente
+                    "versao":       "1.0.0",
+                    "cnpj_empresa": cnpj,
+                }).encode()
+                req = urllib.request.Request(
+                    f"{_SERVIDOR_URL}/api/v1/ativar",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resultado = _json.loads(resp.read())
+
+                if not resultado.get("valida"):
+                    motivo = (resultado.get("motivo")
+                              or resultado.get("message")
+                              or resultado.get("error")
+                              or "Chave inválida.")
+                    self.after(0, lambda: self._pos_ativacao(False, motivo))
+                    return
+
+                # Salva arquivo de licença local para que o login da empresa funcione.
+                # fingerprint vazio → inicializar() ignora verificação de máquina.
+                hoje = datetime.date.today()
+                dados_locais = {
+                    "chave":        chave,
+                    "chave_hash":   _assinar_chave(chave),
+                    "plano":        resultado.get("plano", "BASICO"),
+                    "modulos":      resultado.get("modulos", PLANOS["BASICO"]["modulos"]),
+                    "max_empresas": resultado.get("max_empresas", 1),
+                    "max_usuarios": resultado.get("max_usuarios", 3),
+                    "emitida_em":   resultado.get("emitida_em", hoje.isoformat()),
+                    "validade_ate": resultado.get("validade_ate"),
+                    "fingerprint":  "",   # sem vínculo de máquina — admin ativou pelo painel
+                    "ativada_em":   hoje.isoformat(),
+                    "ultimo_check": hoje.isoformat(),
+                    "grace_ate":    (hoje + datetime.timedelta(days=7)).isoformat(),
+                    "cnpj_empresa": cnpj,
+                }
+                _salvar_local(dados_locais)
+                Licenca._dados  = dados_locais
+                Licenca._status = LicencaStatus.ATIVA
+                Licenca._motivo = ""
+
+                plano = resultado.get("plano", "?")
+                self.after(0, lambda: self._pos_ativacao(
+                    True,
+                    f"Licença {plano} ativada com sucesso!\n"
+                    f"A empresa já pode acessar o sistema.",
+                ))
+            except Exception as e:
+                self.after(0, lambda: self._pos_ativacao(False, str(e)))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _pos_ativacao(self, sucesso: bool, msg: str):
+        self._ativando = False
+        self._btn_ativar.configure(state="normal", text="🔑  Ativar")
+        if sucesso:
+            self._set_msg(f"✓ {msg}", erro=False)
+            messagebox.showinfo("Licença Ativada", msg, parent=self)
+            if self._ao_ativar:
+                self._ao_ativar()
+            self.destroy()
+        else:
+            self._set_msg(msg, erro=True)
+
+    def _set_msg(self, msg: str, erro: bool = True):
+        self._var_msg.set(msg)
+        self._lbl_msg.configure(
+            fg=THEME.get("danger", "red") if erro else THEME.get("success", "green"))

@@ -283,12 +283,16 @@ class LoginView(BaseView):
         if not senha:
             self._var_erro.set("Digite sua senha."); return
         try:
-            from core.auth import Auth
+            from core.auth import Auth, LicencaAuthError
             Auth.login_empresa(
                 self._usuario_selecionado["login"],
                 senha,
                 self._empresa,
             )
+            self.destroy()
+        except LicencaAuthError as e:
+            from tkinter import messagebox
+            messagebox.showerror("Acesso Bloqueado", str(e), parent=self)
             self.destroy()
         except Exception as e:
             self._var_erro.set(str(e))
