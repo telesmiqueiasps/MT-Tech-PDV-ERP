@@ -13,6 +13,7 @@ class LoginView(BaseView):
         self._empresa       = empresa
         self._admin_global  = empresa.get("id") == 0
         self._usuario_selecionado = None
+        self.voltou         = False
         self._build()
 
     def _build(self):
@@ -43,6 +44,12 @@ class LoginView(BaseView):
             self._build_form_direto(body)
         else:
             self._build_selecao_usuario(body)
+
+        # ── Footer: botão voltar ──────────────────────────────────
+        tk.Button(self, text="← Trocar empresa",
+                  font=FONT["sm"], bg=THEME["bg"], fg=THEME["fg_light"],
+                  relief="flat", cursor="hand2", pady=6,
+                  command=self._voltar_empresa).pack(fill="x")
 
     # ── Modo admin global: form direto ───────────────────────────
     def _build_form_direto(self, parent):
@@ -276,6 +283,10 @@ class LoginView(BaseView):
             w.pack_forget()
 
         self._build_selecao_usuario(self._frame_usuarios)
+
+    def _voltar_empresa(self):
+        self.voltou = True
+        self.destroy()
 
     # ── Login ────────────────────────────────────────────────────
     def _login_usuario(self):

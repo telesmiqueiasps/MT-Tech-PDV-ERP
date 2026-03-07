@@ -49,7 +49,7 @@ _LICENCA_FILE = Path.home() / ".pdverp" / "licenca.json"
 # Chave de acesso às rotas administrativas do servidor (/api/admin/*).
 # Deve ser idêntica ao valor de ADMIN_API_KEY configurado no servidor.
 # Gere uma boa: python -c "import secrets; print(secrets.token_hex(32))"
-ADMIN_API_KEY_LOCAL = "Josa1972."
+ADMIN_API_KEY_LOCAL = "JosaMicael@19722018"
 
 
 # ═══════════════════════════════════════════════════════════════

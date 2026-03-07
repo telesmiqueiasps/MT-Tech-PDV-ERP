@@ -11,15 +11,10 @@ class MainWindow:
         self._root.geometry("1280x768")
         self._root.minsize(1024, 600)
         self._root.configure(bg=THEME["bg"])
-        self._centralizar()
+        self._root.geometry("1280x768")
+        self._root.state("zoomed")
         self._build()
         self._abrir_dashboard()
-
-    def _centralizar(self):
-        self._root.update_idletasks()
-        x = (self._root.winfo_screenwidth()  - 1280) // 2
-        y = (self._root.winfo_screenheight() - 768)  // 2
-        self._root.geometry(f"1280x768+{x}+{y}")
 
     def _build(self):
         self._sidebar = tk.Frame(self._root, bg=THEME["bg_sidebar"], width=220)
@@ -36,38 +31,55 @@ class MainWindow:
         self._conteudo.pack(fill="both", expand=True)
 
     def _build_sidebar(self):
+        # ── Logo (fixo) ───────────────────────────────────────────
         logo = tk.Frame(self._sidebar, bg=THEME["primary"], height=64)
         logo.pack(fill="x")
         logo.pack_propagate(False)
-        tk.Label(logo, text=f"🏪  {APP_NAME}", font=FONT["bold"],
-                 bg=THEME["primary"], fg=THEME["fg_white"]).pack(expand=True)
 
+        from assets import Assets
+        img_logo = Assets.logo_branca(altura=36)
+        if img_logo:
+            lbl_logo = tk.Label(logo, image=img_logo, bg=THEME["primary"])
+            lbl_logo._img = img_logo   # evita garbage collection
+            lbl_logo.pack(expand=True)
+        else:
+            tk.Label(logo, text=APP_NAME, font=FONT["bold"],
+                     bg=THEME["primary"], fg=THEME["fg_white"]).pack(expand=True)
+
+        # ── Info usuário (fixo) ───────────────────────────────────
         info = tk.Frame(self._sidebar, bg=THEME["bg_sidebar"], pady=12)
         info.pack(fill="x")
         tk.Label(info, text=Session.usuario()["login"], font=FONT["bold"],
                  bg=THEME["bg_sidebar"], fg=THEME["fg_white"]).pack()
         tk.Label(info, text=Session.empresa()["nome"], font=FONT["sm"],
-                 bg=THEME["bg_sidebar"], fg="#7F8C8D").pack()
+                 bg=THEME["bg_sidebar"], fg="#BDD7EE").pack()
 
         tk.Frame(self._sidebar, bg="#2C3E50", height=1).pack(fill="x")
 
-        self._btns: dict[str, tk.Button] = {}
-        for item in self._menu_items():
-            if item is None:
-                tk.Frame(self._sidebar, bg="#2C3E50", height=1).pack(fill="x", pady=4)
-                continue
-            btn = tk.Button(
-                self._sidebar, text=item["texto"],
-                font=FONT["sm"], anchor="w", padx=20, pady=10,
-                bg=THEME["bg_sidebar"], fg="white",
-                relief="flat", cursor="hand2",
-                activebackground=THEME["primary"],
-                activeforeground="white",
-                command=item["cmd"],
-            )
-            btn.pack(fill="x")
-            self._btns[item["id"]] = btn
+        # ── Barra de pesquisa ─────────────────────────────────────
+        search_wrap = tk.Frame(self._sidebar, bg=THEME["bg_sidebar"], padx=12, pady=8)
+        search_wrap.pack(fill="x")
 
+        search_box = tk.Frame(search_wrap, bg="#3A8AC4",
+                              highlightthickness=1,
+                              highlightbackground="#4A9AD4")
+        search_box.pack(fill="x")
+
+        tk.Label(search_box, text="🔍", font=("Segoe UI", 10),
+                 bg="#3A8AC4", fg="#BDD7EE").pack(side="left", padx=(8, 0))
+
+        self._var_busca = tk.StringVar()
+        self._var_busca.trace_add("write", self._filtrar_menu)
+        tk.Entry(search_box, textvariable=self._var_busca,
+                 font=FONT["sm"], relief="flat",
+                 bg="#3A8AC4", fg="white",
+                 insertbackground="white",
+                 highlightthickness=0).pack(side="left", fill="x",
+                                            expand=True, ipady=6, padx=6)
+
+        tk.Frame(self._sidebar, bg="#2C3E50", height=1).pack(fill="x")
+
+        # ── Sair (fixo, embaixo) ──────────────────────────────────
         tk.Frame(self._sidebar, bg="#2C3E50", height=1).pack(fill="x", side="bottom")
         tk.Button(
             self._sidebar, text="⇠  Sair",
@@ -77,6 +89,85 @@ class MainWindow:
             activebackground="#2C3E50",
             command=self._sair,
         ).pack(fill="x", side="bottom")
+
+        # ── Área scrollável dos itens de menu ─────────────────────
+        self._menu_canvas = tk.Canvas(self._sidebar, bg=THEME["bg_sidebar"],
+                                      highlightthickness=0)
+        self._menu_canvas.pack(fill="both", expand=True)
+
+        self._menu_frame = tk.Frame(self._menu_canvas, bg=THEME["bg_sidebar"])
+        self._menu_canvas_win = self._menu_canvas.create_window(
+            (0, 0), window=self._menu_frame, anchor="nw")
+
+        self._menu_frame.bind("<Configure>", self._on_menu_configure)
+        self._menu_canvas.bind("<Configure>",
+            lambda e: self._menu_canvas.itemconfig(
+                self._menu_canvas_win, width=e.width))
+
+        # Mouse wheel no canvas e nos botões
+        for widget in (self._menu_canvas, self._menu_frame):
+            widget.bind("<MouseWheel>", self._scroll_menu)
+            widget.bind("<Enter>",
+                lambda _, w=widget: w.bind_all("<MouseWheel>", self._scroll_menu))
+            widget.bind("<Leave>",
+                lambda _, w=widget: w.unbind_all("<MouseWheel>"))
+
+        # Monta os botões
+        self._btns: dict[str, tk.Button] = {}
+        self._all_items = self._menu_items()
+        self._separadores: list[tk.Frame] = []
+        self._item_widgets: list[tuple] = []  # (item_dict | None, widget)
+
+        for item in self._all_items:
+            if item is None:
+                sep = tk.Frame(self._menu_frame, bg="#2C3E50", height=1)
+                sep.pack(fill="x", pady=4)
+                self._separadores.append(sep)
+                self._item_widgets.append((None, sep))
+                continue
+            btn = tk.Button(
+                self._menu_frame, text=item["texto"],
+                font=FONT["sm"], anchor="w", padx=20, pady=10,
+                bg=THEME["bg_sidebar"], fg="white",
+                relief="flat", cursor="hand2",
+                activebackground=THEME["primary"],
+                activeforeground="white",
+                command=item["cmd"],
+            )
+            btn.pack(fill="x")
+            btn.bind("<MouseWheel>", self._scroll_menu)
+            self._btns[item["id"]] = btn
+            self._item_widgets.append((item, btn))
+
+    def _on_menu_configure(self, _=None):
+        self._menu_canvas.configure(
+            scrollregion=self._menu_canvas.bbox("all"))
+
+    def _scroll_menu(self, event):
+        try:
+            self._menu_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        except tk.TclError:
+            pass
+
+    def _filtrar_menu(self, *_):
+        termo = self._var_busca.get().strip().lower()
+        filtrando = bool(termo)
+
+        # Remove todos primeiro para preservar a ordem original ao reempacotar
+        for _, widget in self._item_widgets:
+            widget.pack_forget()
+
+        for item, widget in self._item_widgets:
+            if item is None:
+                if not filtrando:
+                    widget.pack(fill="x", pady=4)
+                continue
+            texto_limpo = item["texto"].replace("  ", " ").split(" ", 1)[-1].lower()
+            if not filtrando or termo in texto_limpo:
+                widget.pack(fill="x")
+
+        self._menu_frame.update_idletasks()
+        self._on_menu_configure()
 
     def _menu_items(self) -> list:
         pode = Session.pode

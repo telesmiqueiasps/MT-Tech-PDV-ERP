@@ -25,24 +25,28 @@ def main():
             root.destroy()
             return
 
-    # Seleção de empresa
+    # Seleção de empresa → login (loop permite voltar à seleção)
     from views.login.selecionar_empresa import SelecionarEmpresa
-    tela_empresa = SelecionarEmpresa(root)
-    root.wait_window(tela_empresa)
-
-    empresa = tela_empresa.empresa_selecionada
-    if not empresa:
-        root.destroy()
-        return
-
-    if empresa["id"] != 0:
-        from pathlib import Path
-        DatabaseManager.conectar_empresa(Path(empresa["db_path"]))
-
-    # Login
     from views.login.login_view import LoginView
-    tela_login = LoginView(root, empresa)
-    root.wait_window(tela_login)
+    from pathlib import Path
+
+    while True:
+        tela_empresa = SelecionarEmpresa(root)
+        root.wait_window(tela_empresa)
+
+        empresa = tela_empresa.empresa_selecionada
+        if not empresa:
+            root.destroy()
+            return
+
+        if empresa["id"] != 0:
+            DatabaseManager.conectar_empresa(Path(empresa["db_path"]))
+
+        tela_login = LoginView(root, empresa)
+        root.wait_window(tela_login)
+
+        if not getattr(tela_login, "voltou", False):
+            break
 
     if not Session.ativa():
         root.destroy()
