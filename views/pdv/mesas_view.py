@@ -40,11 +40,84 @@ class MesasView(tk.Frame):
         tk.Button(top, text="Atualizar", command=self.atualizar, bg=THEME["secondary"], fg="white", font=FONT["sm"], relief="flat", padx=10).pack(side="right")
         tk.Button(top, text="Gerenciar mesas", command=self._gerenciar_mesas, bg=THEME["primary"], fg="white", font=FONT["sm"], relief="flat", padx=10).pack(side="right", padx=4)
         # Legenda
-        leg = tk.Frame(self, bg=THEME["bg"]); leg.pack(fill="x", padx=16, pady=(0, 8))
+        leg = tk.Frame(self, bg=THEME["bg"]); leg.pack(fill="x", padx=16, pady=(0, 6))
         for status, cor in [("Livre", "#2dce89"), ("Ocupada", "#f5365c"), ("Reservada", "#f4b942"), ("Inativa", "#aaa")]:
             tk.Label(leg, text="  ", bg=cor, width=2).pack(side="left")
             tk.Label(leg, text=status, bg=THEME["bg"], fg=THEME["fg"], font=FONT["sm"]).pack(side="left", padx=(0, 12))
+        # Barra app garçom
+        self._build_garcom_bar()
         self._canvas_frame = tk.Frame(self, bg=THEME["bg"]); self._canvas_frame.pack(fill="both", expand=True, padx=16)
+
+    def _build_garcom_bar(self):
+        ip = self._local_ip()
+        url_garcom  = f"http://{ip}:5000/garcom/"  if ip else "Servidor não iniciado"
+        url_cozinha = f"http://{ip}:5000/cozinha/" if ip else "Servidor não iniciado"
+
+        bar = tk.Frame(self, bg="#e8f4fd", bd=1, relief="solid"); bar.pack(fill="x", padx=16, pady=(0, 8))
+
+        # Linha garçom
+        row1 = tk.Frame(bar, bg="#e8f4fd"); row1.pack(fill="x", padx=10, pady=(6, 2))
+        tk.Label(row1, text="📱 Garçom:", font=FONT["sm"], bg="#e8f4fd", fg="#1a5276", width=10, anchor="w").pack(side="left")
+        self._url_label = tk.Label(row1, text=url_garcom, font=FONT["sm"], bg="#e8f4fd", fg="#2e86c1", cursor="hand2")
+        self._url_label.pack(side="left", padx=(4, 10))
+        tk.Button(row1, text="Copiar", command=lambda: self._copiar_url(url_garcom, self._url_label, "#2e86c1"),
+                  bg="#2e86c1", fg="white", font=FONT["sm"], relief="flat", padx=8, pady=1).pack(side="left")
+        if ip:
+            tk.Button(row1, text="QR Code", command=lambda: self._mostrar_qr(url_garcom),
+                      bg="#1a5276", fg="white", font=FONT["sm"], relief="flat", padx=8, pady=1).pack(side="left", padx=(4, 0))
+
+        # Linha cozinha
+        row2 = tk.Frame(bar, bg="#e8f4fd"); row2.pack(fill="x", padx=10, pady=(2, 6))
+        tk.Label(row2, text="🍳 Cozinha:", font=FONT["sm"], bg="#e8f4fd", fg="#784212", width=10, anchor="w").pack(side="left")
+        self._url_coz_label = tk.Label(row2, text=url_cozinha, font=FONT["sm"], bg="#e8f4fd", fg="#b7770d", cursor="hand2")
+        self._url_coz_label.pack(side="left", padx=(4, 10))
+        tk.Button(row2, text="Copiar", command=lambda: self._copiar_url(url_cozinha, self._url_coz_label, "#b7770d"),
+                  bg="#b7770d", fg="white", font=FONT["sm"], relief="flat", padx=8, pady=1).pack(side="left")
+        if ip:
+            tk.Button(row2, text="QR Code", command=lambda: self._mostrar_qr(url_cozinha),
+                      bg="#784212", fg="white", font=FONT["sm"], relief="flat", padx=8, pady=1).pack(side="left", padx=(4, 0))
+
+    @staticmethod
+    def _local_ip() -> str | None:
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+            finally:
+                s.close()
+        except Exception:
+            return None
+
+    def _copiar_url(self, url: str, label: tk.Label, cor: str):
+        self.clipboard_clear()
+        self.clipboard_append(url)
+        orig = label.cget("text")
+        label.config(text="✓ Copiado!", fg="#1e8449")
+        self.after(1800, lambda: label.config(text=orig, fg=cor))
+
+    def _mostrar_qr(self, url: str):
+        win = tk.Toplevel(self)
+        win.title("QR Code — App Garçom")
+        win.resizable(False, False)
+        try:
+            import qrcode
+            from PIL import ImageTk
+            img = qrcode.make(url)
+            img = img.resize((220, 220))
+            photo = ImageTk.PhotoImage(img)
+            lbl = tk.Label(win, image=photo)
+            lbl.image = photo
+            lbl.pack(padx=20, pady=(20, 8))
+        except ImportError:
+            tk.Label(win, text="Instale 'qrcode[pil]' para\nexibir o QR Code.",
+                     font=FONT["sm"], fg="#c0392b").pack(padx=24, pady=20)
+        tk.Label(win, text=url, font=FONT["sm"], fg="#2e86c1", wraplength=260).pack(pady=(0, 6))
+        tk.Button(win, text="Fechar", command=win.destroy,
+                  bg=THEME["secondary"], fg="white", font=FONT["sm"], relief="flat", padx=14).pack(pady=(0, 16))
+        from assets import Assets; Assets.setup_toplevel(win, 300, 340)
+        win.grab_set()
 
     def atualizar(self):
         for w in self._canvas_frame.winfo_children(): w.destroy()

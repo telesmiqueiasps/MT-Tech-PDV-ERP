@@ -18,6 +18,7 @@ class Assets:
     _logo:         tk.PhotoImage | None = None
     _logo_branca:  tk.PhotoImage | None = None
     _ico_path:     str | None = None
+    _icones_menu:  dict = {}   # cache: "nome_tamanho" → PhotoImage
 
     @classmethod
     def init(cls, root: tk.Tk):
@@ -73,6 +74,25 @@ class Assets:
     @classmethod
     def logo_branca(cls, largura: int = None, altura: int = None) -> tk.PhotoImage | None:
         return cls._carregar("_logo_branca", "logo_branca.png", largura, altura)
+
+    @classmethod
+    def icone_menu(cls, nome: str, tamanho: int = 18) -> tk.PhotoImage | None:
+        """Carrega e cacheia um ícone da pasta img para uso nos botões do menu lateral."""
+        key = f"{nome}_{tamanho}"
+        if key in cls._icones_menu:
+            return cls._icones_menu[key]
+        caminho = IMG_DIR / f"{nome}.png"
+        if not caminho.exists():
+            return None
+        try:
+            from PIL import Image, ImageTk
+            img = Image.open(caminho).convert("RGBA")
+            img = img.resize((tamanho, tamanho), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            cls._icones_menu[key] = photo
+            return photo
+        except Exception:
+            return None
 
     @classmethod
     def _carregar(cls, attr: str, nome: str,

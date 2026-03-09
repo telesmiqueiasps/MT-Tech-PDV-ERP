@@ -91,6 +91,9 @@ class PedidoView(tk.Toplevel):
     def _build_acoes(self, pai):
         tk.Label(pai, text="Pedido #{}".format(self.pedido["numero"]), bg=THEME["bg_card"], font=FONT["bold"], fg=THEME["fg"]).pack(pady=(12,4))
         tk.Label(pai, text="Mesa: {}".format(self.mesa["nome"]), bg=THEME["bg_card"], font=FONT["md"], fg=THEME["fg"]).pack()
+        garcom = self.pedido.get("garcom_nome", "") or ""
+        if garcom:
+            tk.Label(pai, text="Garçom: {}".format(garcom), bg=THEME["bg_card"], font=FONT["sm"], fg=THEME["secondary"]).pack()
         self._lbl_total = tk.Label(pai, text="Total: R$ 0,00", bg=THEME["bg_card"], font=FONT["xl_bold"], fg=THEME["primary"])
         self._lbl_total.pack(pady=8)
         tk.Button(pai, text="Imprimir cozinha", command=self._imprimir_cozinha, bg=THEME["warning"], fg="white", font=FONT["sm"], relief="flat").pack(fill="x", padx=10, pady=4)

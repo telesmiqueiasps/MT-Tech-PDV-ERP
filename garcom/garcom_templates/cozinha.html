@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2c78ac">
+<title>Cozinha</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#2e86c1;--primary-dark:#2c78ac;
+  --bg:#0f172a;--surface:#1e293b;--surface2:#263348;
+  --pendente:#dc2626;--pendente-bg:#2d1515;--pendente-light:#fca5a5;
+  --preparo:#2563eb;--preparo-bg:#152038;--preparo-light:#93c5fd;
+  --pronto:#16a34a;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;
+  --radius:12px;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+
+/* ── Header — mesma identidade do app garçom ── */
+.header{background:var(--primary-dark);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.header-left{display:flex;align-items:center;gap:10px}
+.header-logo{height:32px;width:auto;object-fit:contain;filter:brightness(0) invert(1)}
+.header-info{display:flex;flex-direction:column;gap:1px}
+.header-info .empresa-nome{font-size:14px;font-weight:700;color:#fff;line-height:1.2}
+.header-info .cozinha-label{font-size:11px;color:rgba(255,255,255,.65);display:flex;align-items:center;gap:5px}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;display:inline-block;animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.header-center{display:flex;flex-direction:column;align-items:center;gap:2px}
+.header-clock{font-size:20px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:1px;line-height:1}
+.header-date{font-size:10px;color:rgba(255,255,255,.6);letter-spacing:.3px}
+.header-right{display:flex;align-items:center;gap:8px}
+.btn-sound{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;transition:background .2s}
+.btn-sound:hover{background:rgba(255,255,255,.25)}
+.btn-sound.off{background:rgba(255,255,255,.06);color:rgba(255,255,255,.5)}
+.progress-bar{height:3px;background:rgba(0,0,0,.3);position:relative;overflow:hidden}
+.progress-fill{height:100%;background:rgba(255,255,255,.5);width:100%;animation:progress var(--refresh-s,8s) linear infinite}
+@keyframes progress{from{width:100%}to{width:0%}}
+
+/* ── Contadores ── */
+.counters{display:flex;gap:0;border-bottom:1px solid var(--border)}
+.counter{flex:1;text-align:center;padding:10px 4px;border-right:1px solid var(--border)}
+.counter:last-child{border-right:none}
+.counter .c-num{font-size:28px;font-weight:800;line-height:1}
+.counter .c-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.counter.pendente .c-num{color:var(--pendente-light)}
+.counter.preparo  .c-num{color:var(--preparo-light)}
+.counter.sem-itens{color:var(--muted);font-style:italic;font-size:13px;display:flex;align-items:center;justify-content:center;padding:10px}
+
+/* ── Grid principal ── */
+.main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media(max-width:680px){.main{grid-template-columns:1fr}}
+.col{padding:16px;min-height:200px}
+.col-header{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid}
+.col.pendente .col-header{border-color:var(--pendente)}
+.col.preparo  .col-header{border-color:var(--preparo)}
+.col-dot{width:12px;height:12px;border-radius:50%}
+.col.pendente .col-dot{background:var(--pendente)}
+.col.preparo  .col-dot{background:var(--preparo)}
+.col-title{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}
+.col.pendente .col-title{color:var(--pendente-light)}
+.col.preparo  .col-title{color:var(--preparo-light)}
+.col-count{margin-left:auto;background:var(--surface2);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700}
+.col.pendente .col-count{color:var(--pendente-light)}
+.col.preparo  .col-count{color:var(--preparo-light)}
+.col-sep{width:1px;background:var(--border);margin:0}
+
+/* ── Cards ── */
+.card{border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;border-left:4px solid;animation:slideIn .25s ease;position:relative;transition:opacity .2s}
+.card.loading-out{opacity:.4;pointer-events:none}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.card.pendente{background:var(--pendente-bg);border-color:var(--pendente)}
+.card.preparo {background:var(--preparo-bg);border-color:var(--preparo)}
+.card.new-flash{animation:flash .6s ease}
+@keyframes flash{0%,100%{background:var(--pendente-bg)}50%{background:#4d1a1a}}
+
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
+.card-mesa{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.card-mesa span{color:var(--text);font-size:13px}
+.card-time{font-size:11px;color:var(--muted);white-space:nowrap}
+.card-time.urgente{color:#f87171;font-weight:700}
+
+.card-produto{font-size:18px;font-weight:800;color:var(--text);line-height:1.2;margin-bottom:4px}
+.card-qty{display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px}
+.card-obs{font-size:12px;color:#fde68a;background:rgba(251,191,36,.1);border-radius:6px;padding:4px 8px;margin-bottom:10px;border-left:3px solid #f59e0b}
+
+.card-btn{width:100%;padding:9px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.card-btn:active{opacity:.8}
+.card-btn.iniciar{background:var(--preparo);color:#fff}
+.card-btn.pronto {background:var(--pronto);color:#fff}
+.card-btn.voltar {background:var(--surface2);color:var(--muted);border:1px solid var(--border);font-size:11px;margin-top:4px}
+
+/* ── Empty ── */
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty .icon{font-size:48px;margin-bottom:12px;display:block}
+.empty p{font-size:14px}
+
+/* ── Spinner ── */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#1e293b;border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:10px;font-size:13px;transition:transform .3s;z-index:999;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <img src="/garcom/logo.png" alt="" class="header-logo" onerror="this.style.display='none'">
+    <div class="header-info">
+      <div class="empresa-nome" id="header-empresa">Cozinha</div>
+      <div class="cozinha-label">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-txt">Conectando...</span>
+      </div>
+    </div>
+  </div>
+  <div class="header-center">
+    <div class="header-clock" id="clock">--:--:--</div>
+    <div class="header-date" id="header-date"></div>
+  </div>
+  <div class="header-right">
+    <button class="btn-sound" id="btn-sound" title="Ativar/desativar alerta sonoro">🔔 Som</button>
+  </div>
+</div>
+
+<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+
+<div class="counters" id="counters">
+  <div class="counter pendente"><div class="c-num" id="cnt-pendente">0</div><div class="c-label">Aguardando</div></div>
+  <div class="counter preparo" ><div class="c-num" id="cnt-preparo">0</div><div class="c-label">Em Preparo</div></div>
+</div>
+
+<div class="main">
+  <div class="col pendente" id="col-pendente">
+    <div class="col-header">
+      <div class="col-dot"></div>
+      <div class="col-title">Aguardando</div>
+      <div class="col-count" id="badge-pendente">0</div>
+    </div>
+    <div id="list-pendente"></div>
+  </div>
+  <div class="col-sep"></div>
+  <div class="col preparo" id="col-preparo">
+    <div class="col-header">
+      <div class="col-dot"></div>
+      <div class="col-title">Em Preparo</div>
+      <div class="col-count" id="badge-preparo">0</div>
+    </div>
+    <div id="list-preparo"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────
+const REFRESH_MS   = 8000;
+const URGENTE_MIN  = 10;  // minutos para destacar como urgente
+let   _soundOn     = localStorage.getItem('coz_sound') !== 'off';
+let   _knownIds    = new Set();
+let   _refreshTimer = null;
+
+// ── Clock ───────────────────────────────────────────────────
+function tickClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  document.getElementById('header-date').textContent =
+    now.toLocaleDateString('pt-BR', {weekday:'short', day:'2-digit', month:'short'});
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// ── Info empresa ─────────────────────────────────────────────
+async function carregarInfo() {
+  try {
+    const r    = await fetch('/api/info');
+    const info = await r.json();
+    const nome = info.empresa || 'Cozinha';
+    document.getElementById('header-empresa').textContent = nome;
+    document.title = nome + ' — Cozinha';
+  } catch (_) {}
+}
+carregarInfo();
+
+// ── Sound ───────────────────────────────────────────────────
+let _audioCtx = null;
+let _audioUnlocked = false;
+
+function _getCtx() {
+  if (!_audioCtx || _audioCtx.state === 'closed')
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+
+// Browsers exigem interação do usuário antes de tocar áudio.
+// Pré-inicializa o contexto ao primeiro toque/clique.
+function _unlockAudio() {
+  if (_audioUnlocked) return;
+  try {
+    if (!_audioCtx || _audioCtx.state === 'closed')
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    // Toca silêncio de 1ms para garantir desbloqueio
+    const buf = _audioCtx.createBuffer(1, 1, 22050);
+    const src = _audioCtx.createBufferSource();
+    src.buffer = buf; src.connect(_audioCtx.destination); src.start(0);
+    _audioUnlocked = true;
+  } catch(_) {}
+}
+['click','touchend','keydown'].forEach(ev =>
+  document.addEventListener(ev, _unlockAudio, {once: false, passive: true})
+);
+
+function _tone(ctx, freq, startT, dur, vol=0.7, type='square') {
+  const osc  = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, startT);
+  gain.gain.exponentialRampToValueAtTime(0.001, startT + dur);
+  osc.start(startT); osc.stop(startT + dur + 0.01);
+}
+
+/** Campainha de alerta de novo pedido — 3 bipes ascendentes + reforço */
+function beep(count = 1) {
+  if (!_soundOn) return;
+  try {
+    const ctx = _getCtx();
+    const t0  = ctx.currentTime + 0.05;
+    const seq = count >= 2
+      ? [[660,0.12],[880,0.12],[1100,0.20]]   // 3 notas ascendentes
+      : [[880,0.15],[1100,0.22]];             // 2 notas para 1 pedido
+    let offset = 0;
+    for (let rep = 0; rep < Math.min(count, 3); rep++) {
+      seq.forEach(([freq, dur]) => {
+        _tone(ctx, freq, t0 + offset, dur, 0.75, 'square');
+        offset += dur + 0.06;
+      });
+      offset += 0.18; // pausa entre repetições
+    }
+  } catch(_) {}
+}
+
+/** Som suave de confirmação (quando cozinheiro marca EM_PREPARO / PRONTO) */
+function beepConfirm() {
+  if (!_soundOn) return;
+  try {
+    const ctx = _getCtx();
+    const t0  = ctx.currentTime + 0.05;
+    _tone(ctx, 523, t0,        0.10, 0.4, 'sine'); // do
+    _tone(ctx, 659, t0 + 0.14, 0.15, 0.4, 'sine'); // mi
+  } catch(_) {}
+}
+
+const btnSound = document.getElementById('btn-sound');
+function updateSoundBtn() {
+  btnSound.textContent = _soundOn ? '🔔 Som' : '🔕 Mudo';
+  btnSound.classList.toggle('off', !_soundOn);
+}
+updateSoundBtn();
+btnSound.addEventListener('click', () => {
+  _soundOn = !_soundOn;
+  localStorage.setItem('coz_sound', _soundOn ? 'on' : 'off');
+  updateSoundBtn();
+  if (_soundOn) beep(1);
+});
+
+// ── Toast ───────────────────────────────────────────────────
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// ── Tempo decorrido ─────────────────────────────────────────
+function tempoDecorrido(criadoEm) {
+  if (!criadoEm) return '';
+  const dt   = new Date(criadoEm.replace(' ', 'T'));
+  const diff = Math.floor((Date.now() - dt) / 60000);
+  if (diff < 1)  return 'agora';
+  if (diff < 60) return diff + 'min';
+  return Math.floor(diff / 60) + 'h' + (diff % 60).toString().padStart(2, '0');
+}
+function isUrgente(criadoEm) {
+  if (!criadoEm) return false;
+  const dt   = new Date(criadoEm.replace(' ', 'T'));
+  const diff = Math.floor((Date.now() - dt) / 60000);
+  return diff >= URGENTE_MIN;
+}
+
+// ── Atualizar status ────────────────────────────────────────
+async function setStatus(itemId, novoStatus, btnEl) {
+  const orig = btnEl.innerHTML;
+  btnEl.innerHTML = '<span class="spinner"></span>';
+  btnEl.disabled  = true;
+  const card = btnEl.closest('.card');
+  try {
+    const r = await fetch(`/api/cozinha/item/${itemId}/status`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: novoStatus}),
+    });
+    if (!r.ok) throw new Error('Erro');
+    beepConfirm();
+    if (card) card.classList.add('loading-out');
+    setTimeout(() => carregar(), 600);
+  } catch(e) {
+    btnEl.innerHTML = orig;
+    btnEl.disabled  = false;
+    toast('Erro ao atualizar item');
+  }
+}
+
+// ── Renderizar card ─────────────────────────────────────────
+function renderCard(item, isNew) {
+  const tempo  = tempoDecorrido(item.criado_em);
+  const urgente = isUrgente(item.criado_em);
+  const cls    = item.status === 'PENDENTE' ? 'pendente' : 'preparo';
+  const mesa   = `Mesa ${item.mesa_numero}`;
+  const setor  = item.mesa_setor || '';
+  const garcom = item.garcom_nome ? ` · ${item.garcom_nome}` : '';
+
+  const obsHtml = item.obs
+    ? `<div class="card-obs">📝 ${item.obs}</div>`
+    : '';
+
+  const btnHtml = item.status === 'PENDENTE'
+    ? `<button class="card-btn iniciar" onclick="setStatus(${item.id},'EM_PREPARO',this)">⚡ Iniciar Preparo</button>`
+    : `<button class="card-btn pronto"  onclick="setStatus(${item.id},'PRONTO',this)">✓ Pronto</button>
+       <button class="card-btn voltar"  onclick="setStatus(${item.id},'PENDENTE',this)">↩ Voltar para fila</button>`;
+
+  const div = document.createElement('div');
+  div.className = `card ${cls}${isNew ? ' new-flash' : ''}`;
+  div.dataset.id = item.id;
+  div.innerHTML = `
+    <div class="card-top">
+      <div class="card-mesa">${setor} <span>${mesa}</span>${garcom}</div>
+      <div class="card-time${urgente ? ' urgente' : ''}">⏱ ${tempo}</div>
+    </div>
+    <div class="card-produto">${item.produto_nome}</div>
+    <div class="card-qty">× ${item.quantidade}</div>
+    ${obsHtml}
+    ${btnHtml}
+  `;
+  return div;
+}
+
+// ── Carregar itens ──────────────────────────────────────────
+async function carregar() {
+  try {
+    const r = await fetch('/api/cozinha/itens');
+    if (!r.ok) throw new Error('offline');
+    const itens = await r.json();
+
+    // Detectar novos
+    const newIds = new Set(itens.filter(i => i.status === 'PENDENTE').map(i => i.id));
+    const novos  = itens.filter(i => i.status === 'PENDENTE' && !_knownIds.has(i.id));
+    if (novos.length > 0 && _knownIds.size > 0) {
+      beep(Math.min(novos.length, 3));
+      toast(`🍽️ ${novos.length} novo(s) pedido(s)!`);
+    }
+    _knownIds = newIds;
+
+    // Separar por status
+    const pendentes = itens.filter(i => i.status === 'PENDENTE');
+    const preparo   = itens.filter(i => i.status === 'EM_PREPARO');
+
+    // Contadores
+    document.getElementById('cnt-pendente').textContent   = pendentes.length;
+    document.getElementById('cnt-preparo').textContent    = preparo.length;
+    document.getElementById('badge-pendente').textContent = pendentes.length;
+    document.getElementById('badge-preparo').textContent  = preparo.length;
+
+    // Renderizar listas
+    const listP = document.getElementById('list-pendente');
+    const listR = document.getElementById('list-preparo');
+
+    // IDs já existentes no DOM
+    const existingP = new Set([...listP.querySelectorAll('.card')].map(c => +c.dataset.id));
+    const existingR = new Set([...listR.querySelectorAll('.card')].map(c => +c.dataset.id));
+
+    // Remover cards que não existem mais
+    listP.querySelectorAll('.card').forEach(c => {
+      if (!pendentes.find(i => i.id === +c.dataset.id)) c.remove();
+    });
+    listR.querySelectorAll('.card').forEach(c => {
+      if (!preparo.find(i => i.id === +c.dataset.id)) c.remove();
+    });
+
+    // Adicionar/atualizar
+    pendentes.forEach(item => {
+      if (!existingP.has(item.id)) {
+        listP.appendChild(renderCard(item, novos.some(n => n.id === item.id)));
+      } else {
+        // Atualizar tempo
+        const card = listP.querySelector(`[data-id="${item.id}"]`);
+        if (card) {
+          const timeEl = card.querySelector('.card-time');
+          if (timeEl) {
+            timeEl.textContent = '⏱ ' + tempoDecorrido(item.criado_em);
+            timeEl.className = 'card-time' + (isUrgente(item.criado_em) ? ' urgente' : '');
+          }
+        }
+      }
+    });
+    preparo.forEach(item => {
+      if (!existingR.has(item.id)) {
+        listR.appendChild(renderCard(item, false));
+      } else {
+        const card = listR.querySelector(`[data-id="${item.id}"]`);
+        if (card) {
+          const timeEl = card.querySelector('.card-time');
+          if (timeEl) {
+            timeEl.textContent = '⏱ ' + tempoDecorrido(item.criado_em);
+            timeEl.className = 'card-time' + (isUrgente(item.criado_em) ? ' urgente' : '');
+          }
+        }
+      }
+    });
+
+    // Empty states
+    if (!pendentes.length) {
+      if (!listP.querySelector('.empty'))
+        listP.innerHTML = '<div class="empty"><span class="icon">✅</span><p>Nenhum pedido aguardando</p></div>';
+    } else {
+      listP.querySelector('.empty')?.remove();
+    }
+    if (!preparo.length) {
+      if (!listR.querySelector('.empty'))
+        listR.innerHTML = '<div class="empty"><span class="icon">🍳</span><p>Nenhum item em preparo</p></div>';
+    } else {
+      listR.querySelector('.empty')?.remove();
+    }
+
+    // Status online
+    document.getElementById('status-dot').style.background = '#4ade80';
+    document.getElementById('status-txt').textContent = 'Online';
+
+    // Reiniciar barra de progresso
+    restartProgress();
+
+  } catch(e) {
+    document.getElementById('status-dot').style.background = '#f87171';
+    document.getElementById('status-txt').textContent = 'Sem conexão';
+    restartProgress();
+  }
+}
+
+// ── Barra de progresso ──────────────────────────────────────
+function restartProgress() {
+  const el = document.getElementById('progress-fill');
+  el.style.animation = 'none';
+  el.offsetHeight; // reflow
+  el.style.setProperty('--refresh-s', (REFRESH_MS / 1000) + 's');
+  el.style.animation = '';
+}
+
+// ── Iniciar ─────────────────────────────────────────────────
+document.getElementById('progress-fill').style.setProperty('--refresh-s', (REFRESH_MS / 1000) + 's');
+carregar();
+setInterval(carregar, REFRESH_MS);
+// Atualizar tempos a cada 30s sem refetch completo
+setInterval(() => {
+  document.querySelectorAll('.card').forEach(card => {
+    // Tempo é atualizado no próximo ciclo completo de carregar()
+  });
+}, 30000);
+</script>
+</body>
+</html>

@@ -6,3 +6,10 @@ Pillow>=10.1.0
 
 # Geração de PDF (relatório de caixa, DANFE, cupom)
 reportlab>=4.2.5
+
+# Servidor web para app garçom (Wi-Fi local)
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# QR Code (tela de mesas — link do app garçom)
+qrcode[pil]>=8.0

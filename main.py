@@ -52,6 +52,58 @@ def main():
         root.destroy()
         return
 
+    # ── Servidor garçom (Wi-Fi local) ─────────────────────────
+    if not Session.is_admin_global():
+        try:
+            import socket as _socket
+            from garcom.garcom_server import iniciar as _iniciar_garcom, consumir_notificacoes, set_empresa_nome
+
+            _iniciar_garcom(porta=5000)
+            set_empresa_nome(empresa.get("razao_social", ""))
+
+            # Descobrir IP local
+            _s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+            try:
+                _s.connect(("8.8.8.8", 80))
+                _ip = _s.getsockname()[0]
+            except Exception:
+                _ip = "127.0.0.1"
+            finally:
+                _s.close()
+            print(f"[garcom] App garçom: http://{_ip}:5000/garcom/")
+
+            def _popup_garcom(n: dict):
+                """Exibe notificação de novo pedido do garçom."""
+                from models.mesa import Mesa
+                mesa = Mesa.buscar_por_id(n.get("mesa_id")) or {}
+                popup = tk.Toplevel(root)
+                popup.overrideredirect(True)
+                popup.configure(bg="#1a73e8")
+                popup.attributes("-topmost", True)
+                sw = popup.winfo_screenwidth()
+                popup.geometry(f"300x90+{sw - 316}+20")
+                tk.Label(popup,
+                         text=f"🔔  Mesa {mesa.get('numero','?')} — {n['produto_nome']}",
+                         font=("Segoe UI", 11, "bold"),
+                         bg="#1a73e8", fg="white").pack(anchor="w", padx=14, pady=(12, 2))
+                tk.Label(popup,
+                         text=f"Qtd: {n['quantidade']}  •  {n['garcom_nome']}  {n['hora']}",
+                         font=("Segoe UI", 9),
+                         bg="#1a73e8", fg="#cce0ff").pack(anchor="w", padx=14)
+                popup.after(4000, popup.destroy)
+
+            def _poll_garcom():
+                try:
+                    for n in consumir_notificacoes():
+                        _popup_garcom(n)
+                except Exception:
+                    pass
+                root.after(3000, _poll_garcom)
+
+            root.after(3000, _poll_garcom)
+        except Exception as _e:
+            print(f"[garcom] Servidor não iniciou: {_e}")
+
     # Janela principal
     from views.main.main_window import MainWindow
     root.deiconify()
