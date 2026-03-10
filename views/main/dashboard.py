@@ -126,7 +126,6 @@ class Dashboard(tk.Frame):
         self._build_header(pad)
         self._build_stats(pad)
         self._build_acesso_rapido(pad)
-        self._build_corpo(pad)
 
     def _build_stats(self, parent):
         stats = self._stats_empresa()
@@ -135,15 +134,6 @@ class Dashboard(tk.Frame):
         for i, s in enumerate(stats):
             self._stat_card(row, s, col=i)
             row.columnconfigure(i, weight=1)
-
-    def _build_corpo(self, parent):
-        row = tk.Frame(parent, bg=THEME["bg"])
-        row.pack(fill="both", expand=True, pady=(20, 0))
-        row.columnconfigure(0, weight=3)
-        row.columnconfigure(1, weight=2)
-
-        self._build_vendas_recentes(row)
-        self._build_alertas(row)
 
     # ── Header ───────────────────────────────────────────────────
     def _build_header(self, parent):
@@ -339,132 +329,3 @@ class Dashboard(tk.Frame):
             w.bind("<Leave>", _leave)
             w.bind("<Button-1>", _click)
 
-    # ── Vendas recentes ───────────────────────────────────────────
-    def _build_vendas_recentes(self, parent):
-        card = self._section_card(parent, col=0, titulo="🧾  Vendas de Hoje")
-
-        cols = ("Hora", "Cliente", "Itens", "Total")
-        widths = (60, 160, 50, 90)
-
-        tree = ttk.Treeview(card, columns=cols, show="headings",
-                            height=10, selectmode="none")
-        for c, w in zip(cols, widths):
-            tree.heading(c, text=c, anchor="w")
-            tree.column(c, width=w, minwidth=w, anchor="w")
-
-        style = ttk.Style()
-        style.configure("Dashboard.Treeview",
-                        background=THEME["bg_card"],
-                        fieldbackground=THEME["bg_card"],
-                        rowheight=28,
-                        font=FONT["sm"])
-        style.configure("Dashboard.Treeview.Heading",
-                        font=FONT["bold"],
-                        background=THEME["row_alt"],
-                        foreground=THEME["fg"])
-        style.map("Dashboard.Treeview", background=[("selected", THEME["primary_light"])])
-        tree.configure(style="Dashboard.Treeview")
-
-        vsb = ttk.Scrollbar(card, orient="vertical", command=tree.yview)
-        tree.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y")
-        tree.pack(fill="both", expand=True)
-
-        tree.tag_configure("alt", background=THEME["row_alt"])
-
-        rows = self._vendas_hoje()
-        if not rows:
-            tree.insert("", "end", values=("—", "Nenhuma venda registrada hoje", "", ""))
-        else:
-            for i, r in enumerate(rows):
-                tag = ("alt",) if i % 2 else ()
-                tree.insert("", "end", values=r, tags=tag)
-
-    def _vendas_hoje(self) -> list[tuple]:
-        try:
-            from core.database import DatabaseManager
-            db   = DatabaseManager.empresa()
-            hoje = date.today().isoformat()
-            rows = db.fetchall(
-                "SELECT v.criado_em, COALESCE(c.nome,'—') AS cliente, "
-                "       (SELECT COUNT(*) FROM itens_venda WHERE venda_id=v.id) AS itens, "
-                "       v.total "
-                "FROM vendas v LEFT JOIN clientes c ON c.id=v.cliente_id "
-                "WHERE DATE(v.criado_em)=? AND v.status='FINALIZADA' "
-                "ORDER BY v.criado_em DESC LIMIT 30", (hoje,)
-            ) or []
-            return [
-                (r["criado_em"][11:16],
-                 (r["cliente"] or "—")[:22],
-                 r["itens"],
-                 f"R$ {float(r['total']):,.2f}")
-                for r in rows
-            ]
-        except Exception:
-            return []
-
-    # ── Alertas de estoque ────────────────────────────────────────
-    def _build_alertas(self, parent):
-        card = self._section_card(parent, col=1, titulo="⚠  Estoque Baixo")
-
-        itens = self._estoque_baixo()
-        if not itens:
-            tk.Label(card, text="✓  Nenhum produto em estoque crítico",
-                     font=FONT["sm"], bg=THEME["bg_card"],
-                     fg=THEME["success"]).pack(anchor="w", pady=12)
-            return
-
-        for p in itens:
-            row = tk.Frame(card, bg=THEME["bg_card"])
-            row.pack(fill="x", pady=3)
-
-            nivel_cor = THEME["danger"] if p["atual"] == 0 else THEME["warning"]
-            tk.Frame(row, bg=nivel_cor, width=8, height=8).pack(side="left",
-                                                                  padx=(0, 8),
-                                                                  pady=6)
-            txt = tk.Frame(row, bg=THEME["bg_card"])
-            txt.pack(side="left", fill="x", expand=True)
-            tk.Label(txt, text=p["nome"][:28], font=FONT["sm"],
-                     bg=THEME["bg_card"], fg=THEME["fg"],
-                     anchor="w").pack(anchor="w")
-
-            quant_txt = "Sem estoque" if p["atual"] == 0 else f"Restam: {p['atual']}"
-            tk.Label(txt, text=f"{quant_txt}  (mín: {p['minimo']})",
-                     font=FONT["xs"], bg=THEME["bg_card"],
-                     fg=THEME["fg_light"], anchor="w").pack(anchor="w")
-
-            tk.Frame(card, bg=THEME["border"], height=1).pack(fill="x")
-
-    def _estoque_baixo(self) -> list[dict]:
-        try:
-            from core.database import DatabaseManager
-            rows = DatabaseManager.empresa().fetchall(
-                "SELECT nome, estoque_atual AS atual, estoque_min AS minimo "
-                "FROM produtos "
-                "WHERE ativo=1 AND estoque_atual <= estoque_min AND estoque_min > 0 "
-                "ORDER BY estoque_atual ASC LIMIT 15"
-            ) or []
-            return [dict(r) for r in rows]
-        except Exception:
-            return []
-
-    # ── Helper: section card ──────────────────────────────────────
-    def _section_card(self, parent, col: int, titulo: str) -> tk.Frame:
-        outer = tk.Frame(parent, bg=THEME["border"])
-        outer.grid(row=0, column=col, padx=(0, 14) if col == 0 else 0,
-                   sticky="nsew", ipadx=1, ipady=1)
-        parent.rowconfigure(0, weight=1)
-
-        card = tk.Frame(outer, bg=THEME["bg_card"])
-        card.pack(fill="both", expand=True)
-
-        hdr = tk.Frame(card, bg=THEME["row_alt"], padx=16, pady=10)
-        hdr.pack(fill="x")
-        tk.Label(hdr, text=titulo, font=FONT["bold"],
-                 bg=THEME["row_alt"], fg=THEME["fg"]).pack(anchor="w")
-
-        tk.Frame(card, bg=THEME["border"], height=1).pack(fill="x")
-
-        body = tk.Frame(card, bg=THEME["bg_card"], padx=12, pady=10)
-        body.pack(fill="both", expand=True)
-        return body

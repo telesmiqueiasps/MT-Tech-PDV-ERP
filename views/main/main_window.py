@@ -1,12 +1,13 @@
 import tkinter as tk
-from config import THEME, FONT, APP_NAME
+from config import THEME, FONT, APP_NAME, APP_VERSION
 from core.session import Session
 from core.auth import Auth
 
 
 class MainWindow:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, on_logout=None):
         self._root = root
+        self._on_logout = on_logout
         self._root.title(APP_NAME)
         self._root.geometry("1280x768")
         self._root.minsize(1024, 600)
@@ -98,16 +99,27 @@ class MainWindow:
         tk.Frame(self._sidebar_extras, bg="#2C3E50", height=1).pack(fill="x")
 
         # ── Sair (fixo, embaixo) ──────────────────────────────────
-        tk.Frame(self._sidebar, bg="#2C3E50", height=1).pack(fill="x", side="bottom")
+        _sair_container = tk.Frame(self._sidebar, bg="#1a4f75")
+        _sair_container.pack(fill="x", side="bottom")
+        tk.Frame(_sair_container, bg="#143f5f", height=1).pack(fill="x")
+        self._lbl_versao = tk.Label(
+            _sair_container, text=f"v{APP_VERSION}",
+            font=("Segoe UI", 8), bg="#1a4f75", fg="#7aafc8",
+        )
+        self._lbl_versao.pack(pady=(5, 0))
         self._btn_sair = tk.Button(
-            self._sidebar, text="⇠  Sair",
-            font=FONT["sm"], anchor="w", padx=20, pady=10,
-            bg=THEME["bg_sidebar"], fg=THEME["danger"],
+            _sair_container, text="⏻  Sair do Sistema",
+            font=("Segoe UI", 10, "bold"), anchor="w", padx=20, pady=11,
+            bg="#1a4f75", fg="#FF6B6B",
             relief="flat", cursor="hand2",
-            activebackground="#2C3E50",
+            activebackground="#143f5f",
+            activeforeground="#FF8E8E",
             command=self._sair,
         )
-        self._btn_sair.pack(fill="x", side="bottom")
+        self._btn_sair.pack(fill="x")
+        self._btn_sair.bind("<Enter>", lambda _: self._btn_sair.configure(bg="#143f5f"))
+        self._btn_sair.bind("<Leave>", lambda _: self._btn_sair.configure(bg="#1a4f75"))
+        self._sair_container = _sair_container
 
         # ── Área scrollável dos itens de menu ─────────────────────
         self._menu_canvas = tk.Canvas(self._sidebar, bg=THEME["bg_sidebar"],
@@ -174,7 +186,8 @@ class MainWindow:
             self._logo_wrap.pack_forget()
             self._sidebar_extras.pack_forget()
             self._btn_toggle.configure(text="▶")
-            self._btn_sair.configure(text="⇠", anchor="center", padx=0)
+            self._btn_sair.configure(text="⏻", anchor="center", padx=0)
+            self._lbl_versao.pack_forget()
             for item, widget in self._item_widgets:
                 if item is None:
                     continue
@@ -190,7 +203,8 @@ class MainWindow:
                                  before=self._btn_toggle)
             self._sidebar_extras.pack(fill="x", after=self._logo_frame)
             self._btn_toggle.configure(text="◀")
-            self._btn_sair.configure(text="⇠  Sair", anchor="w", padx=20)
+            self._btn_sair.configure(text="⏻  Sair do Sistema", anchor="w", padx=20)
+            self._lbl_versao.pack(pady=(5, 0), before=self._btn_sair)
             for item, widget in self._item_widgets:
                 if item is None:
                     continue
@@ -427,4 +441,7 @@ class MainWindow:
         from tkinter import messagebox
         if messagebox.askyesno("Sair", "Deseja encerrar a sessão?", parent=self._root):
             Auth.logout()
-            self._root.destroy()
+            if self._on_logout:
+                self._on_logout()
+            else:
+                self._root.destroy()
