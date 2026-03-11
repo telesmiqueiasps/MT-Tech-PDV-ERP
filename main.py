@@ -268,6 +268,17 @@ def main():
 
         threading.Thread(target=_tarefa, daemon=True).start()
 
+    # ── Backup automático em background ───────────────────────────
+    if not Session.is_admin_global():
+        def _executar_backup():
+            from backup.backup_manager import BackupManager
+            chave = BackupManager.chave_licenca()
+            if chave:
+                BackupManager.verificar_e_executar_se_necessario(chave)
+
+        import threading
+        threading.Thread(target=_executar_backup, daemon=True).start()
+
     root.deiconify()
     MainWindow(root, on_logout=_on_logout)
     _iniciar_verificacao_atualizacao()
