@@ -48,14 +48,18 @@ class AbaProdutos(tk.Frame):
         self._carregar_categorias()
 
         # Botões à direita
-        botao(toolbar, "✏  Editar", tipo="secundario",
-              command=self._editar).pack(side="right", padx=(6, 0))
-        botao(toolbar, "🗑  Desativar", tipo="perigo",
-              command=self._desativar).pack(side="right", padx=(6, 0))
-        tk.Frame(toolbar, bg=THEME["border"], width=1).pack(
-            side="right", fill="y", padx=6)
-        botao(toolbar, "+ Novo Produto", tipo="primario",
-              command=self._novo).pack(side="right")
+        from core.session import Session
+        if Session.pode("produtos", "editar"):
+            botao(toolbar, "✏  Editar", tipo="secundario",
+                  command=self._editar).pack(side="right", padx=(6, 0))
+        if Session.pode("produtos", "deletar"):
+            botao(toolbar, "🗑  Desativar", tipo="perigo",
+                  command=self._desativar).pack(side="right", padx=(6, 0))
+        if Session.pode("produtos", "criar"):
+            tk.Frame(toolbar, bg=THEME["border"], width=1).pack(
+                side="right", fill="y", padx=6)
+            botao(toolbar, "+ Novo Produto", tipo="primario",
+                  command=self._novo).pack(side="right")
 
         # Tabela
         self._tabela = Tabela(self, colunas=[
@@ -70,7 +74,8 @@ class AbaProdutos(tk.Frame):
             ("Estoque",   90),
         ])
         self._tabela.pack(fill="both", expand=True, padx=0, pady=0)
-        self._tabela.ao_duplo_clique = lambda _: self._editar()
+        if Session.pode("produtos", "editar"):
+            self._tabela.ao_duplo_clique = lambda _: self._editar()
 
         # Rodapé
         rodape = tk.Frame(self, bg=THEME["bg_card"],
@@ -123,10 +128,16 @@ class AbaProdutos(tk.Frame):
         return int(sel[0]) if sel else None
 
     def _novo(self):
+        from core.session import Session
+        if not Session.pode("produtos", "criar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para criar produtos.", parent=self); return
         from views.produtos.form_produto import FormProduto
         FormProduto(self, None, self._carregar)
 
     def _editar(self):
+        from core.session import Session
+        if not Session.pode("produtos", "editar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para editar produtos.", parent=self); return
         id_ = self._selecionado_id()
         if not id_:
             messagebox.showwarning("Atenção", "Selecione um produto.", parent=self)
@@ -135,6 +146,9 @@ class AbaProdutos(tk.Frame):
         FormProduto(self, id_, self._carregar)
 
     def _desativar(self):
+        from core.session import Session
+        if not Session.pode("produtos", "deletar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para desativar produtos.", parent=self); return
         id_ = self._selecionado_id()
         if not id_:
             messagebox.showwarning("Atenção", "Selecione um produto.", parent=self)

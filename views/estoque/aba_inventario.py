@@ -21,8 +21,9 @@ class AbaInventario(tk.Frame):
         tk.Label(header, text="Inventário — Contagem e Ajuste em Lote",
                  font=FONT["bold"], bg=THEME["bg_card"], fg=THEME["fg"]).pack(side="left")
 
-        botao(header, "✅  Confirmar Inventário", tipo="sucesso",
-              command=self._confirmar).pack(side="right")
+        if Session.pode("estoque", "ajuste"):
+            botao(header, "✅  Confirmar Inventário", tipo="sucesso",
+                  command=self._confirmar).pack(side="right")
         botao(header, "🔄  Carregar Produtos", tipo="secundario",
               command=self._carregar_produtos).pack(side="right", padx=(0, 8))
 
@@ -159,6 +160,8 @@ class AbaInventario(tk.Frame):
         self._lbl_status.configure(text=f"{len(posicao)} produto(s) carregado(s).")
 
     def _confirmar(self):
+        if not Session.pode("estoque", "ajuste"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para realizar ajuste de inventário.", parent=self); return
         dep_id = self._deposito_id_sel()
         if not dep_id:
             messagebox.showwarning("Atenção", "Selecione um depósito.", parent=self)

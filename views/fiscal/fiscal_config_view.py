@@ -50,6 +50,34 @@ class FiscalConfigView(tk.Frame):
             nb.add(f, text=label)
             Cls(f)
 
+        # ── Barra NFC-e ───────────────────────────────────────────────
+        nfce_bar = tk.Frame(self, bg=THEME["bg_card"],
+                            highlightthickness=1, highlightbackground=THEME["border"],
+                            padx=12, pady=8)
+        nfce_bar.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Label(nfce_bar, text="NFC-e — Nota Fiscal de Consumidor Eletrônica:",
+                 font=FONT["sm"], bg=THEME["bg_card"], fg=THEME["fg"]).pack(side="left")
+        tk.Button(nfce_bar, text="⚙ Configurar NFC-e", font=FONT["sm"],
+                  bg=THEME["primary"], fg="white", relief="flat", padx=12, pady=4,
+                  command=self._abrir_config_nfce).pack(side="left", padx=(12, 6))
+        tk.Button(nfce_bar, text="📄 Documentos NFC-e", font=FONT["sm"],
+                  bg=THEME["secondary"], fg="white", relief="flat", padx=12, pady=4,
+                  command=self._abrir_documentos_nfce).pack(side="left", padx=(0, 6))
+
+    def _abrir_config_nfce(self):
+        try:
+            from fiscal.nfce_config_view import NfceConfigView
+            NfceConfigView(self)
+        except Exception as e:
+            messagebox.showerror("Erro", str(e), parent=self)
+
+    def _abrir_documentos_nfce(self):
+        try:
+            from fiscal.nfce_documentos_view import NfceDocumentosView
+            NfceDocumentosView(self)
+        except Exception as e:
+            messagebox.showerror("Erro", str(e), parent=self)
+
 
 # ════════════════════════════════════════════════════════════════
 # Aba CFOP

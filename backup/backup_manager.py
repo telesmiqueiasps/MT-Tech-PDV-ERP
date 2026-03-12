@@ -2,9 +2,9 @@
 BackupManager — backup automático diário dos bancos SQLite para o servidor.
 
 Fluxo:
-  verificar_e_executar_se_necessario() → roda em background, sem bloquear UI
-  executar()                           → comprime ZIPem memória e envia via HTTP
-  chave_licenca()                      → lê ~/.pdverp/licenca.json
+  verificar_e_executar_se_necessario() → verifica data e dispara daemon thread
+  executar()                           → checkpoint WAL, ZIP em memória, envia
+  chave_licenca()                      → lê ~/.pdverp/licenca.json (payload+sig)
 """
 
 import io
@@ -21,10 +21,10 @@ class BackupManager:
 
     @classmethod
     def verificar_e_executar_se_necessario(cls, chave_licenca: str) -> None:
-        """
-        Verifica se já foi feito backup hoje.
-        Se não, executa em thread daemon (não bloqueia a UI).
-        """
+        """Verifica se já foi feito backup hoje; se não, executa em daemon thread."""
+        if cls._backup_feito_hoje():
+            return
+
         import threading
         threading.Thread(
             target=cls._tarefa_backup,
@@ -35,44 +35,56 @@ class BackupManager:
     @classmethod
     def executar(cls, chave_licenca: str) -> tuple[bool, str]:
         """
-        Comprime os bancos em ZIP (em memória) e envia ao servidor.
-        Retorna (True, mensagem) ou (False, mensagem_de_erro).
-        Nunca lança exceção.
+        Faz checkpoint do WAL, comprime os bancos em ZIP em memória e envia.
+        Retorna (True, msg) ou (False, msg_erro). Nunca lança exceção.
         """
         try:
             import requests
             from models.licenca import _SERVIDOR_URL
             from core.session import Session
+            from core.database import DatabaseManager
             from config import MASTER_DB
 
-            empresa = Session.empresa()
-            cnpj    = (empresa.get("cnpj") or "").replace(".", "").replace(
+            empresa  = Session.empresa()
+            cnpj     = (empresa.get("cnpj") or "").replace(".", "").replace(
                 "/", "").replace("-", "").strip()
+            nome     = empresa.get("razao_social") or empresa.get("nome") or ""
+            db_path  = Path(empresa.get("db_path") or "")
 
             if not cnpj:
                 return False, "CNPJ da empresa não disponível na sessão."
+
+            # ── Checkpoint WAL para consistência ──────────────────
+            # Garante que todos os dados do WAL estejam no arquivo principal
+            # antes de copiar, evitando backup incompleto.
+            try:
+                DatabaseManager.master()._conn.execute("PRAGMA wal_checkpoint(FULL)")
+            except Exception:
+                pass
+            if db_path.exists():
+                try:
+                    DatabaseManager.empresa()._conn.execute("PRAGMA wal_checkpoint(FULL)")
+                except Exception:
+                    pass
 
             # ── Monta ZIP em memória ──────────────────────────────
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, mode="w",
                                  compression=zipfile.ZIP_DEFLATED) as zf:
-                # master.db
                 if MASTER_DB.exists():
                     zf.write(MASTER_DB, arcname="master.db")
-
-                # banco da empresa ativa
-                db_path_str = empresa.get("db_path", "")
-                if db_path_str:
-                    db_path = Path(db_path_str)
-                    if db_path.exists():
-                        zf.write(db_path, arcname=db_path.name)
-
+                if db_path.exists():
+                    zf.write(db_path, arcname=db_path.name)
             buf.seek(0)
 
             # ── Envia ao servidor ─────────────────────────────────
             resp = requests.post(
                 f"{_SERVIDOR_URL}/api/backup/upload",
-                data={"cnpj": cnpj, "chave_licenca": chave_licenca},
+                data={
+                    "cnpj":          cnpj,
+                    "chave_licenca": chave_licenca,
+                    "cliente_nome":  nome,
+                },
                 files={"arquivo": ("backup.zip", buf, "application/zip")},
                 timeout=60,
             )
@@ -86,12 +98,18 @@ class BackupManager:
 
     @classmethod
     def chave_licenca(cls) -> str:
-        """Lê a chave do arquivo local ~/.pdverp/licenca.json."""
+        """
+        Lê a chave do arquivo local ~/.pdverp/licenca.json.
+
+        Estrutura do arquivo (gravada por models/licenca.py):
+          {"payload": "<json string com os dados>", "sig": "<hmac>"}
+        O campo "chave" está dentro do payload (que é uma string JSON aninhada).
+        """
         try:
             licenca_file = Path.home() / ".pdverp" / "licenca.json"
-            dados = json.loads(licenca_file.read_text(encoding="utf-8"))
-            wrapper = dados if "chave" in dados else dados.get("dados", dados)
-            return wrapper.get("chave", "")
+            wrapper = json.loads(licenca_file.read_text(encoding="utf-8"))
+            dados   = json.loads(wrapper["payload"])
+            return dados.get("chave") or ""
         except Exception:
             return ""
 
@@ -99,10 +117,6 @@ class BackupManager:
 
     @classmethod
     def _tarefa_backup(cls, chave_licenca: str) -> None:
-        """Executa backup se necessário e registra a data."""
-        if cls._backup_feito_hoje():
-            return
-
         ok, msg = cls.executar(chave_licenca)
         cls._log(f"{'OK' if ok else 'ERRO'}: {msg}")
 

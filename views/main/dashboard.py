@@ -249,9 +249,9 @@ class Dashboard(tk.Frame):
 
         _MODULOS = [
             {"img": "pdv",          "titulo": "PDV",          "sub": "Frente de Caixa", "key": "pdv",          "cor": THEME["primary"],  "perm": ("pdv", "ver")},
-            {"img": "mesa",         "titulo": "Mesas",         "sub": "Comandas",         "key": "mesas",        "cor": "#E67E22",         "perm": ("pdv", "ver")},
-            {"img": "caixa",        "titulo": "Caixa",         "sub": "Controle",         "key": "caixa",        "cor": "#27AE60",         "perm": ("pdv", "ver")},
-            {"img": "vendas",       "titulo": "Vendas",        "sub": "Histórico",        "key": "vendas",       "cor": "#2980B9",         "perm": ("pdv", "ver")},
+            {"img": "mesa",         "titulo": "Mesas",         "sub": "Comandas",         "key": "mesas",        "cor": "#E67E22",         "perm": ("mesas", "ver")},
+            {"img": "caixa",        "titulo": "Caixa",         "sub": "Controle",         "key": "caixa",        "cor": "#27AE60",         "perm": ("caixa", "ver")},
+            {"img": "vendas",       "titulo": "Vendas",        "sub": "Histórico",        "key": "vendas",       "cor": "#2980B9",         "perm": ("vendas", "ver")},
             {"img": "produtos",     "titulo": "Produtos",      "sub": "Catálogo",         "key": "produtos",     "cor": "#8E44AD",         "perm": ("produtos", "ver")},
             {"img": "clientes",     "titulo": "Clientes",      "sub": "Cadastro",         "key": "clientes",     "cor": "#16A085",         "perm": ("clientes", "ver")},
             {"img": "fornecedores", "titulo": "Fornecedores",  "sub": "Cadastro",         "key": "fornecedores", "cor": "#D35400",         "perm": ("fornecedores", "ver")},

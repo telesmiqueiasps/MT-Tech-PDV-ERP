@@ -24,6 +24,7 @@ class ClientesView(tk.Frame):
         self._build()
 
     def _build(self):
+        from core.session import Session
         PageHeader(self, "👥", "Clientes",
                    "Cadastro e gerenciamento de clientes."
                    ).pack(fill="x", padx=20, pady=(16,0))
@@ -42,16 +43,20 @@ class ClientesView(tk.Frame):
                  highlightcolor=THEME["primary"], width=28
                  ).pack(side="left", padx=(4,0), ipady=5)
 
-        botao(toolbar, "+ Novo Cliente",  tipo="primario",   command=self._novo).pack(side="right")
-        botao(toolbar, "🗑  Desativar",   tipo="perigo",     command=self._desativar).pack(side="right", padx=(0,8))
-        botao(toolbar, "✏  Editar",       tipo="secundario", command=self._editar).pack(side="right", padx=(0,8))
+        if Session.pode("clientes", "criar"):
+            botao(toolbar, "+ Novo Cliente", tipo="primario",   command=self._novo).pack(side="right")
+        if Session.pode("clientes", "deletar"):
+            botao(toolbar, "🗑  Desativar",  tipo="perigo",     command=self._desativar).pack(side="right", padx=(0,8))
+        if Session.pode("clientes", "editar"):
+            botao(toolbar, "✏  Editar",      tipo="secundario", command=self._editar).pack(side="right", padx=(0,8))
 
         self._tabela = Tabela(self, colunas=[
             ("ID",48),("Tipo",60),("Nome",220),("CPF/CNPJ",140),
-            ("IE",120),("Telefone",110),("Cidade",120),("UF",50),("Limite R$",100),
+            ("IE",120),("Telefone",110),("Cidade",120),("Estado",140),("Limite R$",100),
         ])
         self._tabela.pack(fill="both", expand=True, padx=20, pady=(1,0))
-        self._tabela.ao_duplo_clique = lambda _: self._editar()
+        if Session.pode("clientes", "editar"):
+            self._tabela.ao_duplo_clique = lambda _: self._editar()
 
         rodape = tk.Frame(self, bg=THEME["bg_card"], highlightthickness=1,
                           highlightbackground=THEME["border"], padx=14, pady=6)
@@ -63,14 +68,28 @@ class ClientesView(tk.Frame):
 
     def _carregar(self):
         from models.cliente import Cliente
+        from core.database import DatabaseManager
         lista = Cliente.listar(self._var_busca.get().strip())
+
+        # Monta dict {cod_municipio: nome_uf} do banco master para exibição
+        codigos = list({c["cod_municipio_ibge"] for c in lista if c.get("cod_municipio_ibge")})
+        nome_uf_map: dict = {}
+        if codigos:
+            placeholders = ",".join("?" * len(codigos))
+            rows = DatabaseManager.master().fetchall(
+                f"SELECT cod_municipio, nome_uf FROM municipios WHERE cod_municipio IN ({placeholders})",
+                tuple(codigos),
+            )
+            nome_uf_map = {r["cod_municipio"]: r["nome_uf"] for r in rows}
+
         self._tabela.limpar()
         for c in lista:
-            doc = c.get("cpf") or c.get("cnpj") or "—"
+            doc     = c.get("cpf") or c.get("cnpj") or "—"
+            nome_uf = nome_uf_map.get(c.get("cod_municipio_ibge") or "", "") or "—"
             self._tabela.inserir([
                 c["id"], c.get("tipo_pessoa","F"), c["nome"],
                 doc, c.get("ie") or "—", c.get("telefone") or "—",
-                c.get("cidade") or "—", c.get("estado") or "—",
+                c.get("cidade") or "—", nome_uf,
                 f"R$ {c.get('limite_credito',0):,.2f}",
             ])
         self._lbl_total.configure(text=f"{len(lista)} cliente(s)")
@@ -79,12 +98,24 @@ class ClientesView(tk.Frame):
         sel = self._tabela.selecionado()
         return int(sel[0]) if sel else None
 
-    def _novo(self):      FormCliente(self, None, self._carregar)
+    def _novo(self):
+        from core.session import Session
+        if not Session.pode("clientes", "criar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para criar clientes.", parent=self); return
+        FormCliente(self, None, self._carregar)
+
     def _editar(self):
+        from core.session import Session
+        if not Session.pode("clientes", "editar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para editar clientes.", parent=self); return
         id_ = self._selecionado_id()
         if not id_: messagebox.showwarning("Atenção","Selecione um cliente.",parent=self); return
         FormCliente(self, id_, self._carregar)
+
     def _desativar(self):
+        from core.session import Session
+        if not Session.pode("clientes", "deletar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para desativar clientes.", parent=self); return
         id_ = self._selecionado_id()
         if not id_: messagebox.showwarning("Atenção","Selecione um cliente.",parent=self); return
         if messagebox.askyesno("Confirmar","Desativar este cliente?",parent=self):

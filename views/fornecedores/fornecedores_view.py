@@ -43,16 +43,21 @@ class FornecedoresView(tk.Frame):
                  highlightcolor=THEME["primary"], width=28
                  ).pack(side="left", padx=(4,0), ipady=5)
 
-        botao(toolbar, "+ Novo Fornecedor", tipo="primario",   command=self._novo).pack(side="right")
-        botao(toolbar, "🗑  Desativar",     tipo="perigo",     command=self._desativar).pack(side="right", padx=(0,8))
-        botao(toolbar, "✏  Editar",         tipo="secundario", command=self._editar).pack(side="right", padx=(0,8))
+        from core.session import Session
+        if Session.pode("fornecedores", "criar"):
+            botao(toolbar, "+ Novo Fornecedor", tipo="primario",   command=self._novo).pack(side="right")
+        if Session.pode("fornecedores", "deletar"):
+            botao(toolbar, "🗑  Desativar",      tipo="perigo",     command=self._desativar).pack(side="right", padx=(0,8))
+        if Session.pode("fornecedores", "editar"):
+            botao(toolbar, "✏  Editar",          tipo="secundario", command=self._editar).pack(side="right", padx=(0,8))
 
         self._tabela = Tabela(self, colunas=[
             ("ID",48),("Tipo",60),("Nome",220),("CNPJ",140),
             ("IE",110),("Telefone",110),("Contato",130),("Cidade",110),("UF",50),
         ])
         self._tabela.pack(fill="both", expand=True, padx=20, pady=(1,0))
-        self._tabela.ao_duplo_clique = lambda _: self._editar()
+        if Session.pode("fornecedores", "editar"):
+            self._tabela.ao_duplo_clique = lambda _: self._editar()
 
         rodape = tk.Frame(self, bg=THEME["bg_card"], highlightthickness=1,
                           highlightbackground=THEME["border"], padx=14, pady=6)
@@ -80,12 +85,24 @@ class FornecedoresView(tk.Frame):
         sel = self._tabela.selecionado()
         return int(sel[0]) if sel else None
 
-    def _novo(self):      FormFornecedor(self, None, self._carregar)
+    def _novo(self):
+        from core.session import Session
+        if not Session.pode("fornecedores", "criar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para criar fornecedores.", parent=self); return
+        FormFornecedor(self, None, self._carregar)
+
     def _editar(self):
+        from core.session import Session
+        if not Session.pode("fornecedores", "editar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para editar fornecedores.", parent=self); return
         id_ = self._selecionado_id()
         if not id_: messagebox.showwarning("Atenção","Selecione um fornecedor.",parent=self); return
         FormFornecedor(self, id_, self._carregar)
+
     def _desativar(self):
+        from core.session import Session
+        if not Session.pode("fornecedores", "deletar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para desativar fornecedores.", parent=self); return
         id_ = self._selecionado_id()
         if not id_: messagebox.showwarning("Atenção","Selecione um fornecedor.",parent=self); return
         if messagebox.askyesno("Confirmar","Desativar este fornecedor?",parent=self):

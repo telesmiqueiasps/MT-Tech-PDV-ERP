@@ -7,7 +7,7 @@ from views.base_view import BaseView
 class FormUsuario(BaseView):
     def __init__(self, master, usuario_id: int | None, ao_salvar=None):
         titulo = "Editar Usuário" if usuario_id else "Novo Usuário"
-        super().__init__(master, titulo, 420, 720, modal=True)
+        super().__init__(master, titulo, 420, 620, modal=True)
         self.resizable(True, True)
         self._usuario_id = usuario_id
         self._ao_salvar  = ao_salvar

@@ -39,6 +39,12 @@ class AdminView(tk.Frame):
             aba_emp = AbaEmpresas(self._notebook)
             self._notebook.add(aba_emp, text="🏢  Empresas")
 
+        # Aba Administradores Globais (só admin global)
+        if Session.is_admin_global():
+            from views.admin.aba_admins import AbaAdmins
+            aba_adm = AbaAdmins(self._notebook)
+            self._notebook.add(aba_adm, text="🛡  Administradores")
+
         # Aba Usuários
         from views.admin.aba_usuarios import AbaUsuarios
         aba_usr = AbaUsuarios(self._notebook)

@@ -58,15 +58,18 @@ def criar_perfis_padrao() -> None:
             for m, acoes in PERMISSOES.items()
             for a in acoes
         },
-        # Gerente: PDV completo + estoque + produtos + clientes + relatórios
+        # Gerente: PDV completo + caixa + mesas + vendas + estoque + relatórios
         "Gerente": {
             # PDV
-            "pdv:ver": True, "pdv:vender": True, "pdv:desconto": True,
-            "pdv:cancelar": True, "pdv:abrir_caixa": True,
-            "pdv:fechar_caixa": True, "pdv:sangria": True, "pdv:mesas": True,
+            "pdv:ver": True, "pdv:vender": True, "pdv:desconto": True, "pdv:cancelar": True,
+            # Caixa
+            "caixa:ver": True, "caixa:abrir": True, "caixa:fechar": True, "caixa:sangria": True,
+            # Mesas
+            "mesas:ver": True, "mesas:criar": True, "mesas:editar": True,
+            # Vendas
+            "vendas:ver": True, "vendas:cancelar": True,
             # Estoque
-            "estoque:ver": True, "estoque:criar": True, "estoque:editar": True,
-            "estoque:ajuste": True,
+            "estoque:ver": True, "estoque:criar": True, "estoque:editar": True, "estoque:ajuste": True,
             # Produtos / Clientes / Fornecedores
             "produtos:ver": True, "produtos:criar": True, "produtos:editar": True,
             "clientes:ver": True, "clientes:criar": True, "clientes:editar": True,
@@ -75,9 +78,11 @@ def criar_perfis_padrao() -> None:
             "financeiro:ver": True, "financeiro:criar": True,
             "relatorios:ver": True, "relatorios:exportar": True,
         },
-        # Vendedor: PDV básico + mesas + cadastros de consulta
+        # Vendedor: PDV básico + mesas + consulta de vendas
         "Vendedor": {
-            "pdv:ver": True, "pdv:vender": True, "pdv:mesas": True,
+            "pdv:ver": True, "pdv:vender": True,
+            "mesas:ver": True,
+            "vendas:ver": True,
             "produtos:ver": True,
             "clientes:ver": True, "clientes:criar": True,
         },
@@ -92,8 +97,8 @@ def criar_perfis_padrao() -> None:
         "Financeiro": {
             "financeiro:ver": True, "financeiro:criar": True,
             "financeiro:editar": True, "financeiro:fechar_caixa": True,
-            "pdv:ver": True, "pdv:abrir_caixa": True,
-            "pdv:fechar_caixa": True, "pdv:sangria": True,
+            "caixa:ver": True, "caixa:abrir": True, "caixa:fechar": True, "caixa:sangria": True,
+            "vendas:ver": True,
             "relatorios:ver": True, "relatorios:exportar": True,
         },
     }

@@ -13,3 +13,11 @@ flask-cors>=4.0.0
 
 # QR Code (tela de mesas — link do app garçom)
 qrcode[pil]>=8.0
+
+# NFC-e — Emissão de Nota Fiscal de Consumidor Eletrônica
+nfelib==2.5.1
+lxml>=5.2.1
+cryptography>=42.0.5
+requests>=2.31.0
+pyOpenSSL>=24.0.0
+signxml>=3.2.0

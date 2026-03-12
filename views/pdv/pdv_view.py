@@ -406,10 +406,38 @@ class PDVView(tk.Toplevel):
             "SELECT * FROM empresas WHERE id=?", (Session.empresa()["id"],)
         ) or {}
         venda = Venda.buscar_por_id(self.venda_id)
+        venda_id_atual = self.venda_id
+
+        # ── Emissão NFC-e (não bloqueia a venda em caso de falha) ────
         try:
-            path = gerar_cupom_pdf(venda, Venda.itens(self.venda_id), Venda.pagamentos(self.venda_id), empresa)
+            from fiscal.nfce_config_model import NfceConfig
+            cfg_nfce = NfceConfig.carregar()
+            if cfg_nfce and cfg_nfce.get("ativo") and cfg_nfce.get("cert_path"):
+                from fiscal.nfce_service import NfceService
+                resultado_nfce = NfceService().emitir(venda_id_atual)
+                if resultado_nfce.get("autorizada") and resultado_nfce.get("danfe_path"):
+                    self._abrir_pdf(resultado_nfce["danfe_path"])
+                elif not resultado_nfce.get("autorizada"):
+                    messagebox.showwarning(
+                        "NFC-e não autorizada",
+                        f"Venda registrada mas NFC-e rejeitada:\n{resultado_nfce.get('motivo','')}\n\n"
+                        "Tente reemitir pela tela fiscal.",
+                        parent=self,
+                    )
+        except Exception as e_nfce:
+            messagebox.showwarning(
+                "NFC-e",
+                f"Erro na emissão NFC-e: {e_nfce}\nVenda registrada normalmente.",
+                parent=self,
+            )
+
+        # ── Cupom não-fiscal (fallback ou complemento) ───────────────
+        try:
+            path = gerar_cupom_pdf(venda, Venda.itens(venda_id_atual), Venda.pagamentos(venda_id_atual), empresa)
             self._abrir_pdf(path)
-        except Exception: pass
+        except Exception:
+            pass
+
         messagebox.showinfo("Venda finalizada", "Venda #{} concluida!".format(venda["numero"]))
         self._criar_venda()
         self._atualizar_tela()

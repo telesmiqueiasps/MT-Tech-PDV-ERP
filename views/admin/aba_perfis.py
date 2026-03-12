@@ -3,6 +3,42 @@ from tkinter import messagebox
 from config import THEME, FONT, PERMISSOES
 from views.widgets.tabela import Tabela
 
+# Rótulos amigáveis para as ações de cada módulo
+_LABEL_ACAO = {
+    "ver":          "Visualizar",
+    "criar":        "Criar",
+    "editar":       "Editar",
+    "deletar":      "Desativar/Excluir",
+    "ajuste":       "Ajuste de inventário",
+    "vender":       "Realizar vendas",
+    "desconto":     "Aplicar desconto",
+    "cancelar":     "Cancelar venda",
+    "abrir":        "Abrir caixa",
+    "fechar":       "Fechar caixa",
+    "sangria":      "Sangria",
+    "exportar":     "Exportar relatórios",
+    "usuarios":     "Gerenciar usuários",
+    "perfis":       "Gerenciar perfis",
+    "empresas":     "Gerenciar empresas",
+}
+
+_LABEL_MODULO = {
+    "pdv":          "PDV — Ponto de Venda",
+    "caixa":        "Caixa",
+    "mesas":        "Mesas & Comandas",
+    "vendas":       "Vendas",
+    "produtos":     "Produtos",
+    "clientes":     "Clientes",
+    "fornecedores": "Fornecedores",
+    "estoque":      "Estoque",
+    "fiscal":       "Notas Fiscais",
+    "fiscal_cfg":   "Config. Fiscal",
+    "financeiro":   "Financeiro",
+    "relatorios":   "Relatórios",
+    "admin":        "Administração",
+    "licenca":      "Licenças",
+}
+
 
 class AbaPerfis(tk.Frame):
     def __init__(self, master):
@@ -60,6 +96,16 @@ class AbaPerfis(tk.Frame):
                   cursor="hand2", padx=10, pady=5,
                   command=self._excluir_perfil).pack(side="right", padx=(0, 8))
 
+        tk.Button(header, text="✓  Marcar todos", font=FONT["sm"],
+                  bg=THEME["bg_card"], fg=THEME["fg_light"], relief="flat",
+                  cursor="hand2", padx=10, pady=5,
+                  command=self._marcar_todos).pack(side="right", padx=(0, 4))
+
+        tk.Button(header, text="✗  Desmarcar todos", font=FONT["sm"],
+                  bg=THEME["bg_card"], fg=THEME["fg_light"], relief="flat",
+                  cursor="hand2", padx=10, pady=5,
+                  command=self._desmarcar_todos).pack(side="right", padx=(0, 4))
+
         tk.Frame(self._frame_dir, bg=THEME["border"], height=1).pack(fill="x")
 
         # Área de checkboxes com scroll
@@ -86,17 +132,35 @@ class AbaPerfis(tk.Frame):
             bloco = tk.Frame(self._frame_checks, bg=THEME["bg_card"], padx=20, pady=10)
             bloco.pack(fill="x")
 
-            tk.Label(bloco, text=modulo.upper(), font=FONT["bold"],
-                     bg=THEME["bg_card"], fg=THEME["primary"]).pack(anchor="w")
+            cabec = tk.Frame(bloco, bg=THEME["bg_card"])
+            cabec.pack(fill="x")
+
+            tk.Label(cabec, text=_LABEL_MODULO.get(modulo, modulo.upper()), font=FONT["bold"],
+                     bg=THEME["bg_card"], fg=THEME["primary"]).pack(side="left")
+
+            chaves_modulo = [f"{modulo}:{a}" for a in acoes]
+            tk.Button(cabec, text="todos", font=("Segoe UI", 8),
+                      bg=THEME["bg_card"], fg=THEME["fg_light"],
+                      relief="flat", cursor="hand2", pady=0,
+                      command=lambda m=chaves_modulo: self._marcar_modulo(m, True),
+                      ).pack(side="left", padx=(8, 2))
+            tk.Label(cabec, text="|", font=("Segoe UI", 8),
+                     bg=THEME["bg_card"], fg=THEME["border"]).pack(side="left")
+            tk.Button(cabec, text="nenhum", font=("Segoe UI", 8),
+                      bg=THEME["bg_card"], fg=THEME["fg_light"],
+                      relief="flat", cursor="hand2", pady=0,
+                      command=lambda m=chaves_modulo: self._marcar_modulo(m, False),
+                      ).pack(side="left", padx=(2, 0))
 
             row = tk.Frame(bloco, bg=THEME["bg_card"])
             row.pack(anchor="w", pady=(4, 0))
 
             for acao in acoes:
-                chave = f"{modulo}:{acao}"
-                var   = tk.BooleanVar(value=False)
+                chave  = f"{modulo}:{acao}"
+                label  = _LABEL_ACAO.get(acao, acao)
+                var    = tk.BooleanVar(value=False)
                 self._checks[chave] = var
-                tk.Checkbutton(row, text=acao, variable=var,
+                tk.Checkbutton(row, text=label, variable=var,
                                font=FONT["sm"], bg=THEME["bg_card"],
                                fg=THEME["fg"], activebackground=THEME["bg_card"],
                                cursor="hand2").pack(side="left", padx=(0, 12))
@@ -151,3 +215,16 @@ class AbaPerfis(tk.Frame):
             self._perfil_id = None
             self._lbl_perfil.configure(text="Selecione um perfil")
             self._carregar()
+
+    def _marcar_todos(self):
+        for var in self._checks.values():
+            var.set(True)
+
+    def _desmarcar_todos(self):
+        for var in self._checks.values():
+            var.set(False)
+
+    def _marcar_modulo(self, chaves: list[str], valor: bool):
+        for chave in chaves:
+            if chave in self._checks:
+                self._checks[chave].set(valor)

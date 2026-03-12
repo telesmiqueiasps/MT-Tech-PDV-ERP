@@ -44,9 +44,11 @@ class AbaPosicao(tk.Frame):
                        fg=THEME["warning"], cursor="hand2",
                        command=self._carregar).pack(side="left", padx=(0, 12))
 
-        botao(tb, "📥 Entrada",      tipo="sucesso",    command=self._entrada).pack(side="right")
-        botao(tb, "📤 Saída",        tipo="perigo",     command=self._saida).pack(side="right", padx=(0, 8))
-        botao(tb, "🔀 Transferência",tipo="secundario", command=self._transferencia).pack(side="right", padx=(0, 8))
+        from core.session import Session
+        if Session.pode("estoque", "criar"):
+            botao(tb, "📥 Entrada",       tipo="sucesso",    command=self._entrada).pack(side="right")
+            botao(tb, "📤 Saída",         tipo="perigo",     command=self._saida).pack(side="right", padx=(0, 8))
+            botao(tb, "🔀 Transferência", tipo="secundario", command=self._transferencia).pack(side="right", padx=(0, 8))
 
         self._carregar_depositos()
 
@@ -116,15 +118,24 @@ class AbaPosicao(tk.Frame):
         return sel  # [codigo, nome, unid, deposito, qtd, ...]
 
     def _entrada(self):
+        from core.session import Session
+        if not Session.pode("estoque", "criar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para registrar entradas.", parent=self); return
         from views.estoque.form_entrada import FormEntrada
         FormEntrada(self, ao_salvar=self._carregar)
 
     def _saida(self):
+        from core.session import Session
+        if not Session.pode("estoque", "criar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para registrar saídas.", parent=self); return
         sel = self._tabela.selecionado()
         from views.estoque.form_saida import FormSaida
         FormSaida(self, sel, ao_salvar=self._carregar)
 
     def _transferencia(self):
+        from core.session import Session
+        if not Session.pode("estoque", "criar"):
+            messagebox.showwarning("Sem Permissão", "Você não tem permissão para transferências.", parent=self); return
         sel = self._tabela.selecionado()
         from views.estoque.form_transferencia import FormTransferencia
         FormTransferencia(self, sel, ao_salvar=self._carregar)

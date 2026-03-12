@@ -1,0 +1,201 @@
+"""Comunicação com WebService da SEFAZ para NFC-e."""
+import re
+import requests
+
+
+class NfceSefaz:
+    URLS_SVRS = {
+        "homologacao": {
+            "NFeAutorizacao":       "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx",
+            "NFeRetAutorizacao":    "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeRetAutorizacao/NFeRetAutorizacao4.asmx",
+            "NFeInutilizacao":      "https://nfce-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx",
+            "NFeConsultaProtocolo": "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx",
+            "NFeStatusServico":     "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx",
+            "RecepcaoEvento":       "https://nfce-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx",
+        },
+        "producao": {
+            "NFeAutorizacao":       "https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx",
+            "NFeRetAutorizacao":    "https://nfce.svrs.rs.gov.br/ws/NfeRetAutorizacao/NFeRetAutorizacao4.asmx",
+            "NFeInutilizacao":      "https://nfce.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx",
+            "NFeConsultaProtocolo": "https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx",
+            "NFeStatusServico":     "https://nfce.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx",
+            "RecepcaoEvento":       "https://nfce.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx",
+        },
+    }
+
+    def __init__(self, cert_path: str, cert_senha: str, ambiente: int = 2):
+        from fiscal.certificado import Certificado
+        self.cert_obj, self.key_obj = Certificado.carregar(cert_path, cert_senha)
+        self.ambiente     = ambiente
+        self._amb_key     = "homologacao" if ambiente == 2 else "producao"
+        self._cert_path   = cert_path
+        self._cert_senha  = cert_senha
+        self._pem_cert, self._pem_key = self._exportar_pem()
+
+    def _exportar_pem(self):
+        import tempfile, os
+        from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
+        cert_pem = self.cert_obj.public_bytes(Encoding.PEM)
+        key_pem  = self.key_obj.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())
+        fd_cert, path_cert = tempfile.mkstemp(suffix=".pem")
+        fd_key,  path_key  = tempfile.mkstemp(suffix=".pem")
+        os.write(fd_cert, cert_pem)
+        os.write(fd_key,  key_pem)
+        os.close(fd_cert)
+        os.close(fd_key)
+        return path_cert, path_key
+
+    @staticmethod
+    def _limpar_xml(xml: str) -> str:
+        """Remove whitespace entre tags — SEFAZ rejeita caracteres de edição."""
+        xml = xml.strip()
+        xml = re.sub(r'>\s+<', '><', xml)
+        return xml
+
+    def autorizar(self, xml_assinado: str) -> dict:
+        """Envia NFC-e para autorização síncrona. Retorna dict com resultado."""
+        url = self.URLS_SVRS[self._amb_key]["NFeAutorizacao"]
+        envelope = self._montar_envelope_soap(xml_assinado, "NFeAutorizacao4")
+        try:
+            response_xml = self._post(url, envelope)
+            return self._parsear_retorno_autorizacao(response_xml)
+        except TimeoutError:
+            return {"autorizada": False, "motivo": "Timeout — SEFAZ não respondeu",
+                    "protocolo": "", "chave": "", "xml_retorno": ""}
+        except Exception as e:
+            return {"autorizada": False, "motivo": str(e),
+                    "protocolo": "", "chave": "", "xml_retorno": ""}
+
+    def consultar(self, chave_acesso: str) -> dict:
+        """Consulta situação de uma chave de acesso na SEFAZ."""
+        url = self.URLS_SVRS[self._amb_key]["NFeConsultaProtocolo"]
+        envelope = self._montar_envelope_consulta(chave_acesso)
+        try:
+            response_xml = self._post(url, envelope)
+            return self._parsear_retorno_consulta(response_xml)
+        except Exception as e:
+            return {"status": "ERRO", "motivo": str(e)}
+
+    def consultar_servico(self) -> dict:
+        """Consulta status do serviço SEFAZ via NFeStatusServico4."""
+        url = self.URLS_SVRS[self._amb_key]["NFeStatusServico"]
+        xml_cons = self._limpar_xml(
+            f'<consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">'
+            f'<tpAmb>{self.ambiente}</tpAmb>'
+            f'<cUF>25</cUF>'
+            f'<xServ>STATUS</xServ>'
+            f'</consStatServ>'
+        )
+        envelope = self._montar_envelope_soap(xml_cons, "NFeStatusServico4")
+        headers = {
+            "Content-Type": "text/xml; charset=utf-8",
+            "SOAPAction": "http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF",
+        }
+        try:
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            resp = requests.post(url, data=envelope.encode("utf-8"), headers=headers,
+                                 cert=(self._pem_cert, self._pem_key),
+                                 timeout=30, verify=False)
+            resp.raise_for_status()
+            from lxml import etree
+            root   = etree.fromstring(resp.content)
+            ns     = "http://www.portalfiscal.inf.br/nfe"
+            c_stat = root.findtext(f".//{{{ns}}}cStat") or "999"
+            motivo = root.findtext(f".//{{{ns}}}xMotivo") or ""
+            online = c_stat == "107"   # 107 = Serviço em Operação
+            return {"online": online, "motivo": f"{c_stat} - {motivo}"}
+        except Exception as e:
+            return {"online": False, "motivo": str(e)}
+
+    def _montar_envelope_soap(self, xml_conteudo: str, servico: str) -> str:
+        xml_conteudo = self._limpar_xml(xml_conteudo)
+        return (
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+            'xmlns:xsd="http://www.w3.org/2001/XMLSchema" '
+            'xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+            '<soap12:Body>'
+            f'<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/{servico}">'
+            f'{xml_conteudo}'
+            '</nfeDadosMsg>'
+            '</soap12:Body>'
+            '</soap12:Envelope>'
+        )
+
+    def _montar_envelope_consulta(self, chave: str) -> str:
+        xml_cons = (
+            f'<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">'
+            f'<tpAmb>{self.ambiente}</tpAmb>'
+            f'<xServ>CONSULTAR</xServ>'
+            f'<chNFe>{chave}</chNFe>'
+            f'</consSitNFe>'
+        )
+        return self._montar_envelope_soap(xml_cons, "NFeConsultaProtocolo4")
+
+    def _post(self, url: str, envelope: str) -> str:
+        headers = {
+            "Content-Type": "application/soap+xml; charset=utf-8",
+            "SOAPAction": "",
+        }
+        try:
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            resp = requests.post(
+                url, data=envelope.encode("utf-8"),
+                headers=headers,
+                cert=(self._pem_cert, self._pem_key),
+                timeout=30,
+                verify=False,
+            )
+            resp.raise_for_status()
+            return resp.text
+        except requests.Timeout:
+            raise TimeoutError("SEFAZ não respondeu em 30 segundos")
+        except requests.RequestException as e:
+            raise RuntimeError(f"Erro na comunicação com SEFAZ: {e}") from e
+
+    def _parsear_retorno_autorizacao(self, xml_resp: str) -> dict:
+        try:
+            from lxml import etree
+            root = etree.fromstring(xml_resp.encode())
+            ns   = "http://www.portalfiscal.inf.br/nfe"
+            inf  = root.find(f".//{{{ns}}}infProt")
+            if inf is None:
+                motivo = root.findtext(f".//{{{ns}}}xMotivo") or "Resposta inválida"
+                return {"autorizada": False, "motivo": motivo, "protocolo": "", "chave": "", "xml_retorno": xml_resp}
+            c_stat    = inf.findtext(f"{{{ns}}}cStat") or ""
+            x_motivo  = inf.findtext(f"{{{ns}}}xMotivo") or ""
+            protocolo = inf.findtext(f"{{{ns}}}nProt") or ""
+            chave     = inf.findtext(f"{{{ns}}}chNFe") or ""
+            autorizada = c_stat in ("100",)
+            return {
+                "autorizada": autorizada,
+                "motivo":     f"{c_stat} - {x_motivo}",
+                "protocolo":  protocolo,
+                "chave":      chave,
+                "xml_retorno": xml_resp,
+            }
+        except Exception as e:
+            return {"autorizada": False, "motivo": f"Erro ao parsear retorno: {e}",
+                    "protocolo": "", "chave": "", "xml_retorno": xml_resp}
+
+    def _parsear_retorno_consulta(self, xml_resp: str) -> dict:
+        try:
+            from lxml import etree
+            root = etree.fromstring(xml_resp.encode())
+            ns   = "http://www.portalfiscal.inf.br/nfe"
+            c_stat   = root.findtext(f".//{{{ns}}}cStat") or "999"
+            x_motivo = root.findtext(f".//{{{ns}}}xMotivo") or ""
+            return {"status": c_stat, "motivo": f"{c_stat} - {x_motivo}"}
+        except Exception as e:
+            return {"status": "ERRO", "motivo": str(e)}
+
+    def __del__(self):
+        import os
+        for path in (getattr(self, "_pem_cert", None), getattr(self, "_pem_key", None)):
+            if path:
+                try:
+                    os.unlink(path)
+                except Exception:
+                    pass

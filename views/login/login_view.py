@@ -41,7 +41,7 @@ class LoginView(BaseView):
                  bg=THEME["bg"], fg=THEME["primary"]).pack(pady=(0, 16))
 
         if self._admin_global:
-            self._build_form_direto(body)
+            self._build_selecao_admin(body)
         else:
             self._build_selecao_usuario(body)
 
@@ -51,30 +51,116 @@ class LoginView(BaseView):
                   relief="flat", cursor="hand2", pady=6,
                   command=self._voltar_empresa).pack(fill="x")
 
-    # ── Modo admin global: form direto ───────────────────────────
-    def _build_form_direto(self, parent):
-        card = tk.Frame(parent, bg="white",
-                        highlightthickness=1,
-                        highlightbackground=THEME["border"])
-        card.pack(fill="x", pady=(0, 8))
-        inner = tk.Frame(card, bg="white", padx=24, pady=20)
-        inner.pack(fill="x")
+    # ── Modo admin global: cards ──────────────────────────────────
+    def _build_selecao_admin(self, parent):
+        self._frame_usuarios = parent
+        self._frame_senha    = None
 
-        self._var_login = tk.StringVar()
-        self._campo_entry(inner, "Usuário", self._var_login, focus=True)
-        self._var_senha = tk.StringVar()
-        self._campo_entry(inner, "Senha", self._var_senha, show="•")
+        tk.Label(parent, text="Quem vai entrar?", font=FONT["sm"],
+                 bg=THEME["bg"], fg=THEME["fg_light"]).pack(anchor="w", pady=(0, 8))
+
+        outer = tk.Frame(parent, bg=THEME["bg"])
+        outer.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(outer, bg=THEME["bg"],
+                           highlightthickness=0, height=260)
+        scroll = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        self._cards_frame = tk.Frame(canvas, bg=THEME["bg"])
+        self._cards_win   = canvas.create_window(
+            (0, 0), window=self._cards_frame, anchor="nw")
+
+        self._cards_frame.bind("<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+            lambda e: canvas.itemconfig(self._cards_win, width=e.width))
+
+        def _scroll(e):
+            try:
+                canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+            except tk.TclError:
+                pass
+        canvas.bind_all("<MouseWheel>", _scroll)
+        canvas.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         self._var_erro = tk.StringVar()
         tk.Label(parent, textvariable=self._var_erro, font=FONT["sm"],
-                 bg=THEME["bg"], fg=THEME["danger"]).pack()
+                 bg=THEME["bg"], fg=THEME["danger"]).pack(pady=(6, 0))
 
-        tk.Button(parent, text="Entrar no Sistema →",
-                  font=FONT["bold"], bg=THEME["primary"], fg="white",
-                  relief="flat", cursor="hand2", pady=11,
-                  command=self._login_admin).pack(fill="x", pady=(8, 0))
+        self._carregar_admins(self._cards_frame)
 
-        self.bind("<Return>", lambda _: self._login_admin())
+    def _carregar_admins(self, parent):
+        for w in parent.winfo_children():
+            w.destroy()
+
+        try:
+            from core.database import DatabaseManager
+            admins = DatabaseManager.master().fetchall(
+                "SELECT id, login, nome, ativo FROM admin_global WHERE ativo = 1 ORDER BY criado_em"
+            )
+        except Exception:
+            admins = []
+
+        if not admins:
+            tk.Label(parent, text="Nenhum administrador encontrado.",
+                     font=FONT["sm"], bg=THEME["bg"],
+                     fg=THEME["fg_light"]).pack(pady=20)
+            return
+
+        for a in admins:
+            self._card_admin(parent, a)
+
+    def _card_admin(self, parent, admin: dict):
+        nome    = admin.get("nome") or admin.get("login", "?")
+        inicial = nome[0].upper()
+
+        frame = tk.Frame(parent, bg="white",
+                         highlightthickness=1,
+                         highlightbackground=THEME["border"],
+                         cursor="hand2")
+        frame.pack(fill="x", pady=(0, 8))
+
+        inner = tk.Frame(frame, bg="white", padx=16, pady=12)
+        inner.pack(fill="x")
+
+        avatar = tk.Frame(inner, bg=THEME["primary"], width=40, height=40)
+        avatar.pack(side="left", padx=(0, 12))
+        avatar.pack_propagate(False)
+        tk.Label(avatar, text=inicial, font=("Segoe UI", 14, "bold"),
+                 bg=THEME["primary"], fg="white").place(relx=0.5, rely=0.5,
+                                                        anchor="center")
+
+        info = tk.Frame(inner, bg="white")
+        info.pack(side="left", fill="x", expand=True)
+        tk.Label(info, text=nome,
+                 font=FONT["bold"], bg="white", fg=THEME["fg"]).pack(anchor="w")
+        tk.Label(info, text=f"@{admin.get('login')}  •  Administrador Global",
+                 font=FONT["sm"], bg="white", fg=THEME["fg_light"]).pack(anchor="w")
+
+        tk.Label(inner, text="›", font=("Segoe UI", 18),
+                 bg="white", fg=THEME["fg_light"]).pack(side="right")
+
+        def on_enter(e, f=frame, i=inner, av=avatar, inf=info):
+            f.configure(highlightbackground=THEME["primary"])
+            i.configure(bg=THEME["hover"])
+            av.configure(bg=THEME["primary_dark"])
+            for w in inf.winfo_children():
+                w.configure(bg=THEME["hover"])
+
+        def on_leave(e, f=frame, i=inner, av=avatar, inf=info):
+            f.configure(highlightbackground=THEME["border"])
+            i.configure(bg="white")
+            av.configure(bg=THEME["primary"])
+            for w in inf.winfo_children():
+                w.configure(bg="white")
+
+        for widget in [frame, inner, avatar, info] + list(info.winfo_children()):
+            widget.bind("<Enter>", on_enter)
+            widget.bind("<Leave>", on_leave)
+            widget.bind("<Button-1>", lambda e, a=admin: self._selecionar_admin(a))
 
     # ── Modo empresa: cards de usuário ───────────────────────────
     def _build_selecao_usuario(self, parent):
@@ -271,18 +357,20 @@ class LoginView(BaseView):
         self.bind("<Return>", lambda _: self._login_usuario())
 
     def _voltar_selecao(self):
-        """Volta para a lista de usuários."""
+        """Volta para a lista de cards (admin ou usuário)."""
         self._usuario_selecionado = None
         if self._frame_senha:
             self._frame_senha.destroy()
             self._frame_senha = None
         self.unbind("<Return>")
 
-        # Reconstrói a lista
         for w in self._frame_usuarios.winfo_children():
             w.pack_forget()
 
-        self._build_selecao_usuario(self._frame_usuarios)
+        if self._admin_global:
+            self._build_selecao_admin(self._frame_usuarios)
+        else:
+            self._build_selecao_usuario(self._frame_usuarios)
 
     def _voltar_empresa(self):
         self.voltou = True
@@ -309,27 +397,84 @@ class LoginView(BaseView):
             self._var_erro.set(str(e))
             self._var_senha.set("")
 
-    def _login_admin(self):
-        login = self._var_login.get().strip()
+    def _selecionar_admin(self, admin: dict):
+        """Ao clicar num card de admin, mostra o painel de senha."""
+        self._usuario_selecionado = admin
+        self._var_erro.set("")
+
+        for w in self._frame_usuarios.winfo_children():
+            w.pack_forget()
+
+        painel = tk.Frame(self._frame_usuarios, bg=THEME["bg"])
+        painel.pack(fill="both", expand=True)
+        self._frame_senha = painel
+
+        # Card do admin selecionado
+        nome    = admin.get("nome") or admin.get("login", "?")
+        inicial = nome[0].upper()
+
+        card_sel = tk.Frame(painel, bg=THEME["primary_light"],
+                            highlightthickness=1,
+                            highlightbackground=THEME["primary"])
+        card_sel.pack(fill="x", pady=(0, 20))
+        inner_sel = tk.Frame(card_sel, bg=THEME["primary_light"], padx=16, pady=10)
+        inner_sel.pack(fill="x")
+
+        av = tk.Frame(inner_sel, bg=THEME["primary"], width=36, height=36)
+        av.pack(side="left", padx=(0, 10))
+        av.pack_propagate(False)
+        tk.Label(av, text=inicial, font=("Segoe UI", 13, "bold"),
+                 bg=THEME["primary"], fg="white").place(relx=0.5, rely=0.5,
+                                                        anchor="center")
+
+        info = tk.Frame(inner_sel, bg=THEME["primary_light"])
+        info.pack(side="left", fill="x", expand=True)
+        tk.Label(info, text=nome,
+                 font=FONT["bold"], bg=THEME["primary_light"],
+                 fg=THEME["primary_dark"]).pack(anchor="w")
+        tk.Label(info, text=f"@{admin.get('login')}",
+                 font=FONT["sm"], bg=THEME["primary_light"],
+                 fg=THEME["primary"]).pack(anchor="w")
+
+        tk.Button(inner_sel, text="↩ Trocar", font=FONT["sm"],
+                  bg=THEME["primary_light"], fg=THEME["primary"],
+                  relief="flat", cursor="hand2",
+                  command=self._voltar_selecao).pack(side="right")
+
+        # Campo senha
+        tk.Label(painel, text="Digite sua senha", font=FONT["sm"],
+                 bg=THEME["bg"], fg=THEME["fg"]).pack(anchor="w", pady=(0, 4))
+
+        self._var_senha = tk.StringVar()
+        entry_senha = tk.Entry(painel, textvariable=self._var_senha,
+                               show="•", font=FONT["md"],
+                               relief="flat", bg="white", fg=THEME["fg"],
+                               highlightthickness=1,
+                               highlightbackground=THEME["border"],
+                               highlightcolor=THEME["primary"])
+        entry_senha.pack(fill="x", ipady=9)
+        entry_senha.focus_set()
+
+        self._var_erro = tk.StringVar()
+        tk.Label(painel, textvariable=self._var_erro, font=FONT["sm"],
+                 bg=THEME["bg"], fg=THEME["danger"]).pack(pady=(4, 0))
+
+        tk.Button(painel, text="Entrar no Sistema →",
+                  font=FONT["bold"], bg=THEME["primary"], fg="white",
+                  relief="flat", cursor="hand2", pady=11,
+                  command=self._login_admin_selecionado).pack(fill="x", pady=(12, 0))
+
+        self.bind("<Return>", lambda _: self._login_admin_selecionado())
+
+    def _login_admin_selecionado(self):
         senha = self._var_senha.get()
-        if not login or not senha:
-            self._var_erro.set("Preencha usuário e senha."); return
+        if not senha:
+            self._var_erro.set("Digite sua senha."); return
         try:
             from core.auth import Auth
-            Auth.login_admin_global(login, senha)
+            Auth.login_admin_global(self._usuario_selecionado["login"], senha)
             self.destroy()
         except Exception as e:
             self._var_erro.set(str(e))
             self._var_senha.set("")
 
-    # ── Helpers ──────────────────────────────────────────────────
-    def _campo_entry(self, parent, label, var, show="", focus=False):
-        tk.Label(parent, text=label, font=FONT["sm"],
-                 bg="white", fg=THEME["fg"]).pack(anchor="w", pady=(0,4))
-        e = tk.Entry(parent, textvariable=var, show=show, font=FONT["md"],
-                     relief="flat", bg="#f9fafb", fg=THEME["fg"],
-                     highlightthickness=1,
-                     highlightbackground=THEME["border"],
-                     highlightcolor=THEME["primary"])
-        e.pack(fill="x", ipady=9, pady=(0,12))
-        if focus: e.focus_set()

@@ -250,9 +250,8 @@ class MainWindow:
         # Admin global só acessa Administração
         if Session.is_admin_global():
             return [
-                {"id": "admin",      "icone": "config",    "texto": "  Administração",   "cmd": self._abrir_admin},
-                {"id": "fiscal_cfg", "icone": "config",    "texto": "  Config. Fiscal",  "cmd": self._abrir_fiscal_config},
-                {"id": "auditoria",  "icone": None,        "texto": "🔍  Auditoria",     "cmd": self._abrir_auditoria},
+                {"id": "admin",     "icone": "config", "texto": "  Administração", "cmd": self._abrir_admin},
+                {"id": "auditoria", "icone": None,     "texto": "🔍  Auditoria",   "cmd": self._abrir_auditoria},
             ]
 
         itens = [
@@ -260,12 +259,18 @@ class MainWindow:
         ]
 
         # ── PDV ──
+        pdv_block = []
         if pode("pdv", "ver"):
+            pdv_block.append({"id": "pdv",    "icone": "pdv",    "texto": "  Ponto de Venda (PDV)", "cmd": self._abrir_pdv})
+        if pode("mesas", "ver"):
+            pdv_block.append({"id": "mesas",  "icone": "mesa",   "texto": "  Mesas & Comandas",      "cmd": self._abrir_mesas})
+        if pode("caixa", "ver"):
+            pdv_block.append({"id": "caixa",  "icone": "caixa",  "texto": "  Controle de Caixa",     "cmd": self._abrir_caixa})
+        if pode("vendas", "ver"):
+            pdv_block.append({"id": "vendas", "icone": "vendas", "texto": "  Vendas",                "cmd": self._abrir_vendas})
+        if pdv_block:
             itens.append(None)
-            itens.append({"id": "pdv",    "icone": "pdv",          "texto": "  Ponto de Venda (PDV)", "cmd": self._abrir_pdv})
-            itens.append({"id": "mesas",  "icone": "mesa",         "texto": "  Mesas & Comandas",      "cmd": self._abrir_mesas})
-            itens.append({"id": "caixa",  "icone": "caixa",        "texto": "  Controle de Caixa",     "cmd": self._abrir_caixa})
-            itens.append({"id": "vendas", "icone": "vendas",       "texto": "  Vendas",                "cmd": self._abrir_vendas})
+            itens.extend(pdv_block)
 
         itens.append(None)
         if pode("produtos", "ver"):
@@ -277,7 +282,9 @@ class MainWindow:
         if pode("estoque", "ver"):
             itens.append({"id": "estoque",      "icone": "estoque",      "texto": "  Estoque",       "cmd": self._abrir_estoque})
         if pode("fiscal", "ver"):
-            itens.append({"id": "fiscal",       "icone": "notas",        "texto": "  Notas Fiscais", "cmd": self._abrir_fiscal})
+            itens.append({"id": "fiscal",       "icone": "notas",        "texto": "  Notas Fiscais",  "cmd": self._abrir_fiscal})
+        if pode("fiscal_cfg", "ver"):
+            itens.append({"id": "fiscal_cfg",   "icone": "ajustar",      "texto": "  Config. Fiscal", "cmd": self._abrir_fiscal_config})
         itens.append(None)
         if pode("financeiro", "ver"):
             itens.append({"id": "financeiro",   "icone": "financeiro",   "texto": "  Financeiro",    "cmd": self._em_breve})

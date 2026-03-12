@@ -86,15 +86,19 @@ class AbaNota(tk.Frame):
         self._combo_status.bind("<<ComboboxSelected>>", lambda _: self._carregar())
 
         # Botões
-        botao(tb, "+ Nova Nota",       tipo="primario",   command=self._nova).pack(side="right")
-        botao(tb, "📂 Importar XML",   tipo="secundario", command=self._importar_xml).pack(side="right", padx=(0, 8))
-        botao(tb, "✅ Autorizar",       tipo="sucesso",    command=self._autorizar).pack(side="right", padx=(0, 8))
-        botao(tb, "↩️ Estornar",       tipo="secundario", command=self._estornar).pack(side="right", padx=(0, 8))
-        botao(tb, "✏ Editar",          tipo="secundario", command=self._editar).pack(side="right", padx=(0, 8))
+        from core.session import Session
         botao(tb, "🔍 Visualizar",     tipo="secundario", command=self._visualizar).pack(side="right", padx=(0, 8))
-        if self._tipo != "ENTRADA":
-            botao(tb, "🚫 Cancelar",   tipo="perigo",     command=self._cancelar).pack(side="right", padx=(0, 8))
-        botao(tb, "🗑 Excluir",        tipo="perigo",     command=self._excluir).pack(side="right", padx=(0, 8))
+        if Session.pode("fiscal", "criar"):
+            botao(tb, "+ Nova Nota",      tipo="primario",   command=self._nova).pack(side="right")
+            botao(tb, "📂 Importar XML",  tipo="secundario", command=self._importar_xml).pack(side="right", padx=(0, 8))
+        if Session.pode("fiscal", "editar"):
+            botao(tb, "✅ Autorizar",     tipo="sucesso",    command=self._autorizar).pack(side="right", padx=(0, 8))
+            botao(tb, "↩️ Estornar",     tipo="secundario", command=self._estornar).pack(side="right", padx=(0, 8))
+            botao(tb, "✏ Editar",        tipo="secundario", command=self._editar).pack(side="right", padx=(0, 8))
+            if self._tipo != "ENTRADA":
+                botao(tb, "🚫 Cancelar", tipo="perigo",     command=self._cancelar).pack(side="right", padx=(0, 8))
+        if Session.pode("fiscal", "deletar"):
+            botao(tb, "🗑 Excluir",      tipo="perigo",     command=self._excluir).pack(side="right", padx=(0, 8))
 
         self._tabela = Tabela(self, colunas=[
             ("Nº",      70), ("Série",  50), ("Status",    110),
@@ -103,7 +107,8 @@ class AbaNota(tk.Frame):
             ("Total R$",110), ("Criado em", 130),
         ])
         self._tabela.pack(fill="both", expand=True)
-        self._tabela.ao_duplo_clique = lambda _: self._editar()
+        if Session.pode("fiscal", "editar"):
+            self._tabela.ao_duplo_clique = lambda _: self._editar()
 
         rodape = tk.Frame(self, bg=THEME["bg_card"], highlightthickness=1,
                           highlightbackground=THEME["border"], padx=14, pady=6)

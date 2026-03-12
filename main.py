@@ -1,3 +1,8 @@
+import os
+# SEFAZ exige RSA-SHA1 — habilitar antes de qualquer import de cryptography/ssl
+os.environ["OPENSSL_CONF"] = ""
+os.environ["CRYPTOGRAPHY_ALLOW_SHA1_SIGNING"] = "1"
+
 import tkinter as tk
 from config import MASTER_DB, APP_NAME
 from core.database import DatabaseManager
