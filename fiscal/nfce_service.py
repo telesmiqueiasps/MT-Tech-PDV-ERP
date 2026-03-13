@@ -38,13 +38,22 @@ class NfceService:
         from fiscal.nfce_builder import NfceBuilder
         xml_nao_assinado = NfceBuilder().construir(venda, itens, pagtos, config, empresa)
 
+        # DEBUG: salvar XML não assinado para inspeção (na raiz do projeto)
+        import pathlib
+        _dbg_dir = pathlib.Path(__file__).parent.parent
+        (_dbg_dir / "debug_nfce_nao_assinado.xml").write_text(xml_nao_assinado, encoding="utf-8")
+
         # 6. Assinar XML
         from fiscal.certificado import Certificado, CertificadoError
         try:
-            cert, key = Certificado.carregar(config["cert_path"], config.get("cert_senha", ""))
-            xml_assinado = Certificado.assinar_xml(xml_nao_assinado, cert, key)
+            xml_assinado = Certificado.assinar_xml(
+                xml_nao_assinado, config["cert_path"], config.get("cert_senha", "")
+            )
         except CertificadoError as e:
             return {"autorizada": False, "motivo": f"Erro no certificado: {e}"}
+
+        # DEBUG: salvar XML assinado
+        (_dbg_dir / "debug_nfce_assinado.xml").write_text(xml_assinado, encoding="utf-8")
 
         # 7. Salvar documento como PENDENTE
         from datetime import datetime
@@ -86,7 +95,7 @@ class NfceService:
                        atualizado_em=datetime('now','localtime')
                    WHERE id=?""",
                 (resultado["protocolo"], xml_prot, qr_url,
-                 "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx",
+                 "http://www.sefaz.pb.gov.br/nfce",
                  dt.now().strftime("%Y-%m-%d %H:%M:%S"), doc_id),
             )
             # 9a. Gerar DANFE
@@ -157,8 +166,9 @@ class NfceService:
   </evento>
 </envEvento>"""
         from fiscal.certificado import Certificado
-        cert, key = Certificado.carregar(config["cert_path"], config.get("cert_senha", ""))
-        xml_ev_ass = Certificado.assinar_xml(xml_ev, cert, key)
+        xml_ev_ass = Certificado.assinar_xml(
+            xml_ev, config["cert_path"], config.get("cert_senha", "")
+        )
         url = sefaz.URLS_SVRS[sefaz._amb_key]["NFeRecepcaoEvento"]
         try:
             resp_xml = sefaz._post(url, sefaz._montar_envelope_soap(xml_ev_ass, "NfceRecepcaoEvento4"))

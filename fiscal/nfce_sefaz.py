@@ -54,10 +54,58 @@ class NfceSefaz:
 
     def autorizar(self, xml_assinado: str) -> dict:
         """Envia NFC-e para autorização síncrona. Retorna dict com resultado."""
+        import random
+        NS = "http://www.portalfiscal.inf.br/nfe"
+        id_lote = str(random.randint(1, 999_999_999_999_999)).zfill(15)
+        # SEFAZ exige <envNFe> como wrapper — enviar NFe puro causa schema error
+        env_nfe = (
+            f'<enviNFe versao="4.00" xmlns="{NS}">'
+            f'<idLote>{id_lote}</idLote>'
+            f'<indSinc>1</indSinc>'
+            f'{xml_assinado}'
+            f'</enviNFe>'
+        )
         url = self.URLS_SVRS[self._amb_key]["NFeAutorizacao"]
-        envelope = self._montar_envelope_soap(xml_assinado, "NFeAutorizacao4")
+        # Não passar xml_assinado por _limpar_xml — removeria whitespace que
+        # foi incluído no C14N durante a assinatura, invalidando o digest
+        envelope = self._montar_envelope_soap_raw(env_nfe, "NFeAutorizacao4")
+        # DEBUG: validar XML localmente contra XSD antes de enviar
+        try:
+            import pathlib
+            from lxml import etree
+            _xsd_path = pathlib.Path(__file__).parent.parent
+            _schema_dir = None
+            try:
+                import nfelib
+                _schema_dir = pathlib.Path(nfelib.__file__).parent / "nfe" / "schemas" / "v4_0"
+            except Exception:
+                pass
+            if _schema_dir and (_schema_dir / "enviNFe_v4.00.xsd").exists():
+                _xsd = etree.XMLSchema(etree.parse(str(_schema_dir / "enviNFe_v4.00.xsd")))
+                _doc = etree.fromstring(env_nfe.encode("utf-8"))
+                _erros = [f"Linha {e.line}: {e.message}" for e in _xsd.error_log] if not _xsd.validate(_doc) else []
+                _relatorio = "\n".join(_erros) if _erros else "enviNFe VALIDO pelo XSD local"
+                (_xsd_path / "debug_nfce_xsd_erros.txt").write_text(_relatorio, encoding="utf-8")
+        except Exception as _ex:
+            try:
+                (_xsd_path / "debug_nfce_xsd_erros.txt").write_text(f"Validacao XSD falhou: {_ex}", encoding="utf-8")
+            except Exception:
+                pass
+        # DEBUG: salvar envelope enviado
+        try:
+            import pathlib
+            _dbg = pathlib.Path(__file__).parent.parent
+            (_dbg / "debug_nfce_envelope.xml").write_text(envelope, encoding="utf-8")
+        except Exception:
+            pass
         try:
             response_xml = self._post(url, envelope)
+            # DEBUG: salvar resposta
+            try:
+                import pathlib
+                (pathlib.Path(__file__).parent.parent / "debug_nfce_resposta.xml").write_text(response_xml, encoding="utf-8")
+            except Exception:
+                pass
             return self._parsear_retorno_autorizacao(response_xml)
         except TimeoutError:
             return {"autorizada": False, "motivo": "Timeout — SEFAZ não respondeu",
@@ -109,7 +157,12 @@ class NfceSefaz:
             return {"online": False, "motivo": str(e)}
 
     def _montar_envelope_soap(self, xml_conteudo: str, servico: str) -> str:
+        """Envelope SOAP com _limpar_xml — usar apenas para XML sem assinatura."""
         xml_conteudo = self._limpar_xml(xml_conteudo)
+        return self._montar_envelope_soap_raw(xml_conteudo, servico)
+
+    def _montar_envelope_soap_raw(self, xml_conteudo: str, servico: str) -> str:
+        """Envelope SOAP sem limpar whitespace — usar quando XML já está assinado."""
         return (
             '<?xml version="1.0" encoding="utf-8"?>'
             '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '

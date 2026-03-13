@@ -1,12 +1,7 @@
 """Gerenciamento de certificado digital A1 (.pfx) para NFC-e."""
-import os
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
-
-# SEFAZ NF-e usa RSA-SHA1 — garantir habilitado mesmo se importado fora do main
-os.environ.setdefault("OPENSSL_CONF", "")
-os.environ.setdefault("CRYPTOGRAPHY_ALLOW_SHA1_SIGNING", "1")
 
 
 class CertificadoError(Exception):
@@ -14,9 +9,11 @@ class CertificadoError(Exception):
 
 
 class Certificado:
+
     @staticmethod
     def carregar(pfx_path: str, senha: str):
-        """Carrega o .pfx e retorna (cert, key) da biblioteca cryptography."""
+        """Carrega o .pfx e retorna (cert, key) — mantido para compatibilidade
+        com NfceSefaz que usa os objetos para autenticação TLS mútua."""
         try:
             from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
             from cryptography.hazmat.backends import default_backend
@@ -32,42 +29,35 @@ class Certificado:
             raise CertificadoError(f"Erro ao carregar certificado: {e}") from e
 
     @staticmethod
-    def assinar_xml(xml_str: str, cert, key) -> str:
+    def assinar_xml(xml_str: str, pfx_path: str, senha: str) -> str:
         """
-        Assina o XML usando signxml com RSA-SHA1 (padrão SEFAZ NF-e 4.00).
-        Retorna o XML assinado como string.
+        Assina o XML com RSA-SHA1 e XMLDSig usando erpbrasil.assinatura.
+        Suporta NFe/NFC-e (infNFe) e Eventos (infEvento).
         """
         try:
             from lxml import etree
-            from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
-            import signxml
+            from erpbrasil.assinatura import Assinatura
+            from erpbrasil.assinatura import certificado as cert_module
 
-            # Serializar cert e key para PEM
-            key_pem = key.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())
-            cert_pem = cert.public_bytes(Encoding.PEM)
+            senha_bytes = senha.encode() if isinstance(senha, str) else senha
 
+            # Localizar o Id do elemento assinável (infNFe ou infEvento)
+            match = re.search(r'Id="((?:NFe|ID)[^"]+)"', xml_str)
+            if not match:
+                raise CertificadoError(
+                    "Elemento assinável (infNFe ou infEvento com Id) não encontrado no XML"
+                )
+            ref_id = match.group(1)
+
+            # Parsear para elemento lxml (assina_xml2 exige elemento, não string)
             root = etree.fromstring(xml_str.encode("utf-8"))
 
-            signer = signxml.XMLSigner(
-                method=signxml.methods.enveloped,
-                signature_algorithm="rsa-sha1",
-                digest_algorithm="sha1",
-                c14n_algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
-            )
+            cert_obj = cert_module.Certificado(pfx_path, senha_bytes, raise_expirado=False)
+            assinatura = Assinatura(cert_obj)
+            # assina_xml2 retorna string; appenda Signature ao pai do elemento assinável
+            xml_assinado = assinatura.assina_xml2(root, ref_id)
+            return xml_assinado
 
-            # O elemento a ser referenciado é infNFe com Id
-            ns = "http://www.portalfiscal.inf.br/nfe"
-            inf_nfe = root.find(f"{{{ns}}}infNFe")
-            if inf_nfe is None:
-                raise CertificadoError("Elemento infNFe não encontrado no XML")
-
-            signed_root = signer.sign(
-                root,
-                key=key_pem,
-                cert=cert_pem,
-                reference_uri=f"#{inf_nfe.get('Id')}",
-            )
-            return etree.tostring(signed_root, encoding="unicode")
         except CertificadoError:
             raise
         except Exception as e:
@@ -84,6 +74,35 @@ class Certificado:
         """Extrai o CNPJ embutido no Subject do certificado."""
         cert, _ = Certificado.carregar(pfx_path, senha)
         subject = cert.subject.rfc4514_string()
-        # CNPJ geralmente aparece como CNPJ=XXXXXXXXXXXXXXXXXX ou no CN
         match = re.search(r"(\d{14})", subject)
         return match.group(1) if match else ""
+
+    @staticmethod
+    def info(pfx_path: str, senha: str) -> dict:
+        """Retorna dict com cnpj, razao_social, validade, dias_restantes, vencido."""
+        try:
+            from cryptography import x509
+            cert, _ = Certificado.carregar(pfx_path, senha)
+
+            cn = ""
+            try:
+                cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+            except Exception:
+                pass
+
+            validade = cert.not_valid_after_utc.date()
+            hoje = datetime.now(timezone.utc).date()
+            dias = (validade - hoje).days
+            cnpj = Certificado.cnpj_certificado(pfx_path, senha)
+
+            return {
+                "cnpj": cnpj,
+                "razao_social": cn.split(":")[0].strip() if ":" in cn else cn,
+                "validade": validade.strftime("%d/%m/%Y"),
+                "dias_restantes": dias,
+                "vencido": dias < 0,
+            }
+        except CertificadoError:
+            raise
+        except Exception as e:
+            raise CertificadoError(f"Erro ao ler informações do certificado: {e}") from e
