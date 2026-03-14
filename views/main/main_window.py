@@ -415,8 +415,10 @@ class MainWindow:
                 return
             self._abrir_caixa()
             return
+        self._limpar()
+        self._set_ativo("pdv", "Ponto de Venda (PDV)")
         from views.pdv.pdv_view import PDVView
-        PDVView(self._root, caixa)
+        PDVView(self._conteudo, caixa).pack(fill="both", expand=True)
 
     def _abrir_mesas(self):
         self._limpar()

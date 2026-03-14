@@ -1,41 +1,83 @@
+"""
+NfceConfig — lê e grava configuração NFC-e diretamente na tabela
+`empresas` do banco master, eliminando duplicidade com nfce_config.
+
+Mapeamento de campos master → chaves usadas no fiscal:
+  empresas.ambiente_fiscal  → config["ambiente"]
+  empresas.serie_nfce       → config["serie"]
+  empresas.prox_nfce        → config["proximo_numero"]
+  empresas.id_csc           → config["id_csc"] / config["csc_id"]
+  empresas.csc_token        → config["csc_token"]
+  empresas.cert_path        → config["cert_path"]
+  empresas.cert_senha       → config["cert_senha"]
+"""
 from core.database import DatabaseManager
+from core.session import Session
 
 
 class NfceConfig:
+
     @staticmethod
-    def _db():
-        return DatabaseManager.empresa()
+    def _empresa_id() -> int:
+        return Session.empresa()["id"]
 
     @staticmethod
     def carregar() -> dict | None:
-        return NfceConfig._db().fetchone("SELECT * FROM nfce_config WHERE ativo=1 LIMIT 1")
+        """Retorna configuração NFC-e da empresa atual (lida do master)."""
+        row = DatabaseManager.master().fetchone(
+            "SELECT * FROM empresas WHERE id=?", (NfceConfig._empresa_id(),)
+        )
+        if not row:
+            return None
+        return {
+            "ambiente":        row.get("ambiente_fiscal", 2),
+            "serie":           row.get("serie_nfce", 1),
+            "proximo_numero":  row.get("prox_nfce", 1),
+            "id_csc":          row.get("id_csc") or "",
+            "csc_id":          row.get("id_csc") or "",
+            "csc_token":       row.get("csc_token") or "",
+            "cert_path":       row.get("cert_path") or "",
+            "cert_senha":      row.get("cert_senha") or "",
+            "versao_nfe":      "4.00",
+            "ativo":           row.get("ativo", 1),
+        }
 
     @staticmethod
     def salvar(dados: dict) -> None:
-        db = NfceConfig._db()
-        atual = db.fetchone("SELECT id FROM nfce_config LIMIT 1")
-        campos = ["ambiente", "serie", "csc_id", "csc_token", "cert_path",
-                  "cert_senha", "versao_nfe", "id_csc", "ativo"]
-        if atual:
-            sets = ", ".join(f"{c}=?" for c in campos if c in dados)
-            sets += ", atualizado_em=datetime('now','localtime')"
-            vals = [dados[c] for c in campos if c in dados] + [atual["id"]]
-            db.execute(f"UPDATE nfce_config SET {sets} WHERE id=?", tuple(vals))
-        else:
-            cols = list(dados.keys())
-            placeholders = ", ".join("?" * len(cols))
-            db.execute(
-                f"INSERT INTO nfce_config ({', '.join(cols)}) VALUES ({placeholders})",
-                tuple(dados.values()),
-            )
+        """Persiste configuração NFC-e no master (tabela empresas)."""
+        campos_map = {
+            "ambiente":       "ambiente_fiscal",
+            "serie":          "serie_nfce",
+            "proximo_numero": "prox_nfce",
+            "id_csc":         "id_csc",
+            "csc_token":      "csc_token",
+            "cert_path":      "cert_path",
+            "cert_senha":     "cert_senha",
+        }
+        sets  = []
+        vals  = []
+        for chave_config, coluna in campos_map.items():
+            if chave_config in dados:
+                sets.append(f"{coluna}=?")
+                vals.append(dados[chave_config])
+        if not sets:
+            return
+        vals.append(NfceConfig._empresa_id())
+        DatabaseManager.master().execute(
+            f"UPDATE empresas SET {', '.join(sets)} WHERE id=?",
+            tuple(vals),
+        )
 
     @staticmethod
     def proximo_numero() -> int:
         """Retorna e incrementa atomicamente o próximo número da NFC-e."""
-        db = NfceConfig._db()
-        db.execute("UPDATE nfce_config SET proximo_numero = proximo_numero + 1 WHERE ativo=1")
-        row = db.fetchone("SELECT proximo_numero FROM nfce_config WHERE ativo=1 LIMIT 1")
-        return (row["proximo_numero"] - 1) if row else 1
+        db  = DatabaseManager.master()
+        eid = NfceConfig._empresa_id()
+        db.execute(
+            "UPDATE empresas SET prox_nfce = prox_nfce + 1 WHERE id=?", (eid,)
+        )
+        row = db.fetchone("SELECT prox_nfce FROM empresas WHERE id=?", (eid,))
+        return (row["prox_nfce"] - 1) if row else 1
 
     @staticmethod
     def ambiente_label() -> str:

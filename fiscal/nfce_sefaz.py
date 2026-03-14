@@ -1,36 +1,24 @@
 """Comunicação com WebService da SEFAZ para NFC-e."""
 import re
 import requests
+from fiscal.nfce_uf_config import NfceUfConfig, SVRS_URLS
 
 
 class NfceSefaz:
-    URLS_SVRS = {
-        "homologacao": {
-            "NFeAutorizacao":       "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx",
-            "NFeRetAutorizacao":    "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeRetAutorizacao/NFeRetAutorizacao4.asmx",
-            "NFeInutilizacao":      "https://nfce-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx",
-            "NFeConsultaProtocolo": "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx",
-            "NFeStatusServico":     "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx",
-            "RecepcaoEvento":       "https://nfce-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx",
-        },
-        "producao": {
-            "NFeAutorizacao":       "https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx",
-            "NFeRetAutorizacao":    "https://nfce.svrs.rs.gov.br/ws/NfeRetAutorizacao/NFeRetAutorizacao4.asmx",
-            "NFeInutilizacao":      "https://nfce.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx",
-            "NFeConsultaProtocolo": "https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx",
-            "NFeStatusServico":     "https://nfce.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx",
-            "RecepcaoEvento":       "https://nfce.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx",
-        },
-    }
+    # Mantido para compatibilidade — código usa self._ws ao invés deste dict
+    URLS_SVRS = SVRS_URLS
 
-    def __init__(self, cert_path: str, cert_senha: str, ambiente: int = 2):
+    def __init__(self, cert_path: str, cert_senha: str, ambiente: int = 2, uf: str = "PB"):
         from fiscal.certificado import Certificado
         self.cert_obj, self.key_obj = Certificado.carregar(cert_path, cert_senha)
         self.ambiente     = ambiente
+        self._uf          = uf
         self._amb_key     = "homologacao" if ambiente == 2 else "producao"
         self._cert_path   = cert_path
         self._cert_senha  = cert_senha
         self._pem_cert, self._pem_key = self._exportar_pem()
+        # URLs dos WebServices: lidas da tabela nfce_uf_config (fallback SVRS)
+        self._ws = NfceUfConfig.ws_urls(uf, ambiente)
 
     def _exportar_pem(self):
         import tempfile, os
@@ -65,7 +53,7 @@ class NfceSefaz:
             f'{xml_assinado}'
             f'</enviNFe>'
         )
-        url = self.URLS_SVRS[self._amb_key]["NFeAutorizacao"]
+        url = self._ws["NFeAutorizacao"]
         # Não passar xml_assinado por _limpar_xml — removeria whitespace que
         # foi incluído no C14N durante a assinatura, invalidando o digest
         envelope = self._montar_envelope_soap_raw(env_nfe, "NFeAutorizacao4")
@@ -116,7 +104,7 @@ class NfceSefaz:
 
     def consultar(self, chave_acesso: str) -> dict:
         """Consulta situação de uma chave de acesso na SEFAZ."""
-        url = self.URLS_SVRS[self._amb_key]["NFeConsultaProtocolo"]
+        url = self._ws["NFeConsultaProtocolo"]
         envelope = self._montar_envelope_consulta(chave_acesso)
         try:
             response_xml = self._post(url, envelope)
@@ -126,11 +114,12 @@ class NfceSefaz:
 
     def consultar_servico(self) -> dict:
         """Consulta status do serviço SEFAZ via NFeStatusServico4."""
-        url = self.URLS_SVRS[self._amb_key]["NFeStatusServico"]
+        url    = self._ws["NFeStatusServico"]
+        c_uf   = NfceUfConfig.c_uf(self._uf)
         xml_cons = self._limpar_xml(
             f'<consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">'
             f'<tpAmb>{self.ambiente}</tpAmb>'
-            f'<cUF>25</cUF>'
+            f'<cUF>{c_uf}</cUF>'
             f'<xServ>STATUS</xServ>'
             f'</consStatServ>'
         )

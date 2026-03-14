@@ -4,12 +4,13 @@ from tkinter import ttk, messagebox, simpledialog
 from config import THEME, FONT
 from core.session import Session
 
-class PDVView(tk.Toplevel):
-    """Janela fullscreen de PDV varejo."""
+class PDVView(tk.Frame):
+    """Painel PDV integrado à janela principal (não abre Toplevel independente)."""
 
     def __init__(self, master, caixa: dict, venda_id: int = None):
-        super().__init__(master)
-        self.caixa  = caixa
+        super().__init__(master, bg=THEME["bg"])
+        self.pack(fill="both", expand=True)
+        self.caixa    = caixa
         self.venda_id = venda_id
         self.itens    = []
         if venda_id is None:
@@ -17,10 +18,13 @@ class PDVView(tk.Toplevel):
         self._build()
         if venda_id is not None:
             self._atualizar_tela()
-        self.state("zoomed")
-        self.title("PDV — Caixa {} | {}".format(caixa["numero"], caixa["nome"]))
-        self.protocol("WM_DELETE_WINDOW", self._fechar)
+        # F12 vinculado à janela raiz — desvinculado quando o frame for destruído
+        self._toplevel = self.winfo_toplevel()
+        self._toplevel.bind("<F12>", lambda _e: self._finalizar())
+        self.bind("<Destroy>", self._ao_destruir)
         self._busca_entry.focus()
+
+    # ── Ciclo de vida ──────────────────────────────────────────────────────
 
     def _criar_venda(self):
         from models.venda import Venda
@@ -32,8 +36,26 @@ class PDVView(tk.Toplevel):
         if hasattr(self, "_doc_var"):
             self._doc_var.set("")
 
+    def _ao_destruir(self, event):
+        """Chamado quando o frame é destruído (ao navegar para outro módulo)."""
+        if event.widget is not self:
+            return
+        try:
+            self._root.unbind("<F12>")
+        except Exception:
+            pass
+        # Venda vazia → apaga silenciosamente; com itens → permanece ABERTA no BD
+        try:
+            from models.venda import Venda
+            venda = Venda.buscar_por_id(self.venda_id)
+            if venda and venda["status"] == "ABERTA" and not Venda.itens(self.venda_id):
+                Venda.deletar(self.venda_id)
+        except Exception:
+            pass
+
+    # ── Construção da UI ──────────────────────────────────────────────────
+
     def _build(self):
-        self.configure(bg=THEME["bg"])
         # Layout: esquerda=busca+itens | direita=totais+pagamento
         esq = tk.Frame(self, bg=THEME["bg"])
         esq.pack(side="left", fill="both", expand=True, padx=8, pady=8)
@@ -174,8 +196,8 @@ class PDVView(tk.Toplevel):
         doc_entry = tk.Entry(row_doc, textvariable=self._doc_var, font=FONT["sm"],
                              relief="flat", bg=THEME["row_alt"], fg=THEME["fg"])
         doc_entry.pack(side="left", fill="x", expand=True, ipady=4)
-        doc_entry.bind("<Return>",    lambda e: self._salvar_doc())
-        doc_entry.bind("<FocusOut>",  lambda e: self._salvar_doc())
+        doc_entry.bind("<Return>",   lambda e: self._salvar_doc())
+        doc_entry.bind("<FocusOut>", lambda e: self._salvar_doc())
         tk.Button(row_doc, text="✓", command=self._salvar_doc, bg=THEME["secondary"],
                   fg="white", font=FONT["sm"], relief="flat", padx=6).pack(side="left", padx=(4,0))
 
@@ -185,7 +207,8 @@ class PDVView(tk.Toplevel):
         tk.Button(pai, text="Cancelar venda", command=self._cancelar,
                   bg=THEME["danger"], fg="white", font=FONT["sm"],
                   relief="flat").pack(fill="x", padx=10, pady=2)
-        self.bind("<F12>", lambda e: self._finalizar())
+
+    # ── Operações de venda ────────────────────────────────────────────────
 
     def _adicionar_item(self, produto, quantidade):
         from models.venda import Venda
@@ -288,7 +311,6 @@ class PDVView(tk.Toplevel):
             pendente_atual = Venda.valor_pendente(self.venda_id)
             if pendente_atual <= 0.01:
                 break
-            # Última pessoa paga o exato restante (evita diferença de arredondamento)
             valor = pendente_atual if i == n else min(por_pessoa, pendente_atual)
             result = self._dialog_pagamento_pessoa(i, n, valor)
             if result is None:
@@ -370,7 +392,6 @@ class PDVView(tk.Toplevel):
                 "R$ {:.2f}".format(float(it["preco_unitario"])),
                 "R$ {:.2f}".format(float(it.get("desconto_valor",0))),
                 "R$ {:.2f}".format(float(it["subtotal"])), it["id"]))
-        # Carrega cliente_doc ao abrir venda existente (não sobrescreve digitação em andamento)
         doc_db = venda.get("cliente_doc") or ""
         if doc_db and not self._doc_var.get():
             self._doc_var.set(doc_db)
@@ -449,17 +470,3 @@ class PDVView(tk.Toplevel):
         Venda.cancelar(self.venda_id, motivo="Cancelado pelo operador")
         self._criar_venda()
         self._atualizar_tela()
-
-    def _fechar(self):
-        from models.venda import Venda
-        venda = Venda.buscar_por_id(self.venda_id)
-        if venda and venda["status"] == "ABERTA":
-            if not Venda.itens(self.venda_id):
-                # Sem itens: remove silenciosamente, sem deixar rastro
-                Venda.deletar(self.venda_id)
-            else:
-                # Com itens não finalizados: pergunta se quer cancelar
-                if messagebox.askyesno("Fechar PDV",
-                        "Há itens na venda atual. Deseja cancelar a venda antes de fechar?"):
-                    Venda.cancelar(self.venda_id, "Cancelado ao fechar o PDV")
-        self.destroy()

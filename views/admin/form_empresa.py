@@ -33,7 +33,10 @@ class FormEmpresa(BaseView):
         canvas.bind("<Configure>",
             lambda e: canvas.itemconfig(win, width=e.width))
         canvas.bind_all("<MouseWheel>",
-            lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+            lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units")
+                      if canvas.winfo_exists() else None)
+        self.bind("<Destroy>",
+            lambda e: canvas.unbind_all("<MouseWheel>") if e.widget is self else None)
 
         P = 24
         tk.Label(body, text="Editar Empresa" if self._empresa_id else "Nova Empresa",
@@ -165,10 +168,21 @@ class FormEmpresa(BaseView):
             CampoEntry(row_doc, "Próximo número", var_p).pack(
                 side="left", fill="x", expand=True)
 
-        # ── CERTIFICADO DIGITAL ──────────────────────────────────
-        SecaoForm(body, "CERTIFICADO DIGITAL (A1 — .pfx)").pack(fill="x", padx=P, pady=(8, 0))
+        # ── NFC-e / CERTIFICADO DIGITAL ──────────────────────────
+        SecaoForm(body, "NFC-e / CERTIFICADO DIGITAL (A1 — .pfx)").pack(fill="x", padx=P, pady=(8, 0))
         c5 = self._card(body, P)
 
+        # Ambiente e CSC
+        row_nfce = tk.Frame(c5, bg=THEME["bg_card"])
+        row_nfce.pack(fill="x", pady=(0, 8))
+        self._var_id_csc   = tk.StringVar()
+        self._var_csc_token = tk.StringVar()
+        CampoEntry(row_nfce, "CSC ID (portal SEFAZ)", self._var_id_csc).pack(
+            side="left", fill="x", expand=True, padx=(0, 8))
+        CampoEntry(row_nfce, "CSC Token", self._var_csc_token).pack(
+            side="left", fill="x", expand=True)
+
+        # Certificado
         self._var_cert = tk.StringVar()
         cert_row = tk.Frame(c5, bg=THEME["bg_card"])
         cert_row.pack(fill="x", pady=(0, 8))
@@ -247,6 +261,8 @@ class FormEmpresa(BaseView):
         self._var_prox_nfse.set(str(e.get("prox_nfse") or 1))
         self._var_serie_cte.set(str(e.get("serie_cte") or 1))
         self._var_prox_cte.set(str(e.get("prox_cte") or 1))
+        self._var_id_csc.set(e.get("id_csc") or "")
+        self._var_csc_token.set(e.get("csc_token") or "")
         self._var_cert.set(e.get("cert_path") or "")
         self._var_cert_senha.set(e.get("cert_senha") or "")
 
@@ -306,6 +322,8 @@ class FormEmpresa(BaseView):
             "prox_cte":   self._var_prox_cte.get(),
             "cert_path":  self._var_cert.get(),
             "cert_senha": self._var_cert_senha.get(),
+            "id_csc":     self._var_id_csc.get().strip(),
+            "csc_token":  self._var_csc_token.get().strip(),
         }
 
         if self._empresa_id:

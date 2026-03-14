@@ -34,18 +34,26 @@ class NfceBuilder:
     def construir(self, venda: dict, itens: list, pagamentos: list,
                   config: dict, empresa: dict) -> str:
         """Retorna XML não assinado da NFC-e (compacto, sem whitespace entre tags)."""
+        from fiscal.nfce_uf_config import NfceUfConfig
+
         numero    = config["proximo_numero_usado"]
         serie     = config.get("serie", 1)
         ambiente  = config.get("ambiente", 2)
         cnpj      = re.sub(r"\D", "", empresa.get("cnpj", ""))
         c_nf      = str(random.randint(10000000, 99999999))
-        c_uf      = "25"  # Paraíba
+
+        # UF e parâmetros via tabela nfce_uf_config
+        uf_raw   = str(empresa.get("estado", "PB") or "PB").strip()
+        uf_sigla = _UF_COD_SIGLA.get(uf_raw, uf_raw) if uf_raw.isdigit() else uf_raw
+        c_uf     = NfceUfConfig.c_uf(uf_sigla)
+        fuso     = NfceUfConfig.fuso_horario(uf_sigla)
+
         mod       = "65"
         serie_str = str(serie).zfill(3)
         n_nf_str  = str(numero).zfill(9)
         tp_emis   = "1"
-        dh_emi    = datetime.now().strftime("%Y-%m-%dT%H:%M:%S-03:00")
-        c_mun_fg  = empresa.get("cod_municipio_ibge", "2507507")  # Campina Grande/PB
+        dh_emi    = datetime.now().strftime(f"%Y-%m-%dT%H:%M:%S{fuso}")
+        c_mun_fg  = empresa.get("cod_municipio_ibge") or ""
 
         # Chave de acesso 44 dígitos
         aamm = datetime.now().strftime("%y%m")
@@ -58,19 +66,15 @@ class NfceBuilder:
         v_desc = float(venda.get("desconto_valor", 0) or 0)
         v_nf   = float(venda.get("total", v_prod - v_desc))
 
-        # QR Code — URL de consulta PB (produção e homologação unificadas desde 04/2024)
-        qr_url       = self._gerar_qrcode_url(chave, ambiente, config)
-        url_consulta = "http://www.sefaz.pb.gov.br/nfce"
+        # QR Code e URL de consulta lidos da tabela por UF e ambiente
+        qr_url       = self._gerar_qrcode_url(chave, ambiente, config, uf_sigla)
+        url_consulta = NfceUfConfig.url_qrcode(uf_sigla, ambiente) or ""
 
         # Inscrição Estadual — campo "ie" na tabela empresas
         ie_raw = (empresa.get("ie") or empresa.get("inscricao_estadual") or "").strip()
         ie = re.sub(r"\D", "", ie_raw) if ie_raw.upper() != "ISENTO" else "ISENTO"
         if not ie:
             ie = "ISENTO"
-
-        # UF: aceitar sigla ou código numérico (ex: "25" → "PB")
-        uf_raw = str(empresa.get("estado", "PB") or "PB").strip()
-        uf_sigla = _UF_COD_SIGLA.get(uf_raw, uf_raw) if uf_raw.isdigit() else uf_raw
 
         x_nome = self._esc(empresa.get("razao_social") or empresa.get("nome", ""))[:60]
         x_fant = self._esc(empresa.get("nome", "") or "")[:60]
@@ -209,13 +213,14 @@ class NfceBuilder:
         partes.append("</pag>")
         return "".join(partes)
 
-    def _gerar_qrcode_url(self, chave: str, ambiente: int, config: dict) -> str:
+    def _gerar_qrcode_url(self, chave: str, ambiente: int, config: dict, uf: str = "PB") -> str:
+        from fiscal.nfce_uf_config import NfceUfConfig
         # cIdToken como inteiro (sem zeros à esquerda) — padrão XSD: (0|[1-9]{1,6})
         csc_id_raw = config.get("id_csc") or config.get("csc_id") or "1"
         csc_id    = int(str(csc_id_raw).strip() or "1")
-        csc_token = config.get("csc_token") or ""
-        base_url  = "http://www.sefaz.pb.gov.br/nfce"
-        # Hash V2: SHA-1(chave + csc_token) sem separadores — NT 2015.002
+        csc_token = (config.get("csc_token") or "").replace("-", "")  # SEFAZ armazena sem traços
+        base_url  = NfceUfConfig.url_qrcode(uf, ambiente) or ""
+        # Hash V2: SHA-1(chave + csc_token_sem_traços) — NT 2015.002
         c_hash = hashlib.sha1(
             f"{chave}{csc_token}".encode()
         ).hexdigest().upper()

@@ -44,6 +44,7 @@ class FiscalConfigView(tk.Frame):
             ("📊 Alíq. ICMS",    AbaAliqICMS),
             ("⚙  Regras",        AbaRegras),
             ("🔒 Fechamentos",   AbaFechamentos),
+            ("🗺 UF / URLs",     AbaUfUrls),
         ]
         for label, Cls in abas:
             f = tk.Frame(nb, bg=THEME["bg"])
@@ -66,8 +67,9 @@ class FiscalConfigView(tk.Frame):
 
     def _abrir_config_nfce(self):
         try:
-            from fiscal.nfce_config_view import NfceConfigView
-            NfceConfigView(self)
+            from core.session import Session
+            from views.admin.form_empresa import FormEmpresa
+            FormEmpresa(self, empresa_id=Session.empresa()["id"])
         except Exception as e:
             messagebox.showerror("Erro", str(e), parent=self)
 
@@ -899,3 +901,169 @@ class AbaFechamentos(tk.Frame):
         messagebox.showinfo("Reaberto",
             f"Competência {mes:02d}/{ano} reaberta.", parent=self)
         self._carregar()
+
+
+# ════════════════════════════════════════════════════════════════
+# Aba UF / URLs NFC-e
+# ════════════════════════════════════════════════════════════════
+class AbaUfUrls(tk.Frame):
+    """
+    Exibe e permite editar a configuração de URLs e parâmetros NFC-e por UF.
+    Tudo que varia por estado (cUF, fuso, QR Code, WebServices SEFAZ)
+    fica aqui — sem necessidade de alteração de código.
+    """
+    def __init__(self, master):
+        super().__init__(master, bg=THEME["bg"])
+        self.pack(fill="both", expand=True, padx=8, pady=8)
+        self._build()
+        self._carregar()
+
+    def _build(self):
+        # Cabeçalho informativo
+        info = tk.Frame(self, bg="#e8f4fd",
+                        highlightthickness=1, highlightbackground="#90c8f0")
+        info.pack(fill="x", pady=(0, 8))
+        tk.Label(info,
+                 text="Parâmetros que variam por estado: código IBGE (cUF), fuso horário, "
+                      "URLs do QR Code e WebServices da SEFAZ.\n"
+                      "Campos WS em branco = SVRS centralizado (padrão para a maioria dos estados).",
+                 font=FONT["xs"], bg="#e8f4fd", fg="#1a6090",
+                 justify="left", wraplength=800).pack(anchor="w", padx=10, pady=6)
+
+        # Barra de ações
+        bar = tk.Frame(self, bg=THEME["bg"])
+        bar.pack(fill="x", pady=(0, 6))
+        botao(bar, "✏ Editar UF", tipo="secundario",
+              command=self._editar).pack(side="left")
+        botao(bar, "🔄 Atualizar", tipo="secundario",
+              command=self._carregar).pack(side="left", padx=(6, 0))
+        tk.Label(bar, text="Duplo clique na linha para editar",
+                 font=FONT["xs"], bg=THEME["bg"], fg=THEME["fg_light"]).pack(side="right")
+
+        # Tabela
+        self._tab = Tabela(self, colunas=[
+            ("UF", 40), ("cUF", 45), ("Fuso", 65),
+            ("QR Code Hom.", 260), ("QR Code Prod.", 260),
+            ("WS Autorizacao Hom.", 180), ("WS Autorizacao Prod.", 180),
+        ])
+        self._tab.pack(fill="both", expand=True)
+        self._tab.ao_duplo_clique = lambda _: self._editar()
+
+    def _carregar(self):
+        from fiscal.nfce_uf_config import NfceUfConfig
+        self._dados = NfceUfConfig.listar()
+        self._tab.limpar()
+        for r in self._dados:
+            self._tab.inserir([
+                r["uf"], r["c_uf"], r.get("fuso_horario", "-03:00"),
+                r.get("url_qrcode_hom") or "—",
+                r.get("url_qrcode_prod") or "—",
+                r.get("ws_autorizacao_hom") or "(SVRS padrão)",
+                r.get("ws_autorizacao_prod") or "(SVRS padrão)",
+            ])
+
+    def _editar(self):
+        idx = self._tab.selecionado_indice()
+        if idx is None:
+            messagebox.showwarning("Atenção", "Selecione uma UF.", parent=self)
+            return
+        FormUfUrls(self, dados=self._dados[idx], ao_salvar=self._carregar)
+
+
+class FormUfUrls(tk.Toplevel):
+    """Formulário para editar os parâmetros NFC-e de uma UF."""
+    _CAMPOS = [
+        ("c_uf",                    "Código IBGE (cUF)",           False),
+        ("fuso_horario",            "Fuso Horário (ex: -03:00)",   False),
+        ("url_qrcode_hom",          "URL QR Code — Homologação",   False),
+        ("url_qrcode_prod",         "URL QR Code — Produção",      False),
+        ("ws_autorizacao_hom",      "WS Autorização — Hom.",       False),
+        ("ws_autorizacao_prod",     "WS Autorização — Prod.",      False),
+        ("ws_ret_autorizacao_hom",  "WS Ret. Autorização — Hom.", False),
+        ("ws_ret_autorizacao_prod", "WS Ret. Autorização — Prod.", False),
+        ("ws_status_hom",           "WS Status Serviço — Hom.",    False),
+        ("ws_status_prod",          "WS Status Serviço — Prod.",   False),
+        ("ws_evento_hom",           "WS Recepção Evento — Hom.",   False),
+        ("ws_evento_prod",          "WS Recepção Evento — Prod.",  False),
+        ("obs",                     "Observação",                  False),
+    ]
+
+    def __init__(self, master, dados: dict, ao_salvar=None):
+        super().__init__(master)
+        self.title(f"NFC-e — UF {dados.get('uf', '')}")
+        self.configure(bg=THEME["bg"])
+        self.resizable(True, True)
+        self.grab_set()
+        self._dados     = dados
+        self._ao_salvar = ao_salvar
+        self._vars: dict[str, tk.StringVar] = {}
+        self._build()
+        self._preencher()
+
+    def _build(self):
+        canvas = tk.Canvas(self, bg=THEME["bg"], highlightthickness=0)
+        vsb = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas.pack(fill="both", expand=True)
+        body = tk.Frame(canvas, bg=THEME["bg"])
+        win  = canvas.create_window((0, 0), window=body, anchor="nw")
+        body.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+
+        P = 20
+        tk.Label(body, text=f"Configuração NFC-e — {self._dados.get('uf', '')}",
+                 font=FONT["title"], bg=THEME["bg"], fg=THEME["fg"]
+                 ).pack(anchor="w", padx=P, pady=(16, 8))
+
+        card = tk.Frame(body, bg=THEME["bg_card"],
+                        highlightthickness=1, highlightbackground=THEME["border"])
+        card.pack(fill="x", padx=P, pady=(0, 8))
+        inner = tk.Frame(card, bg=THEME["bg_card"], padx=14, pady=12)
+        inner.pack(fill="x")
+
+        for chave, label, _ in self._CAMPOS:
+            var = tk.StringVar()
+            self._vars[chave] = var
+            CampoEntry(inner, label, var).pack(fill="x", pady=(0, 6))
+
+        # Dica sobre WS
+        dica = tk.Frame(body, bg="#fffbe6",
+                        highlightthickness=1, highlightbackground="#f0c040")
+        dica.pack(fill="x", padx=P, pady=(0, 8))
+        tk.Label(dica,
+                 text="Campos WS em branco → sistema usa SVRS centralizado automaticamente.\n"
+                      "Preencha apenas se o estado usar WebService próprio (ex: SP, MG, AM).",
+                 font=FONT["xs"], bg="#fffbe6", fg="#7a5c00",
+                 justify="left", wraplength=560).pack(anchor="w", padx=10, pady=6)
+
+        botao(body, "💾  Salvar", tipo="primario",
+              command=self._salvar).pack(fill="x", padx=P, pady=(0, 20))
+
+        self.geometry("600x680")
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() - 600) // 2
+        y = (self.winfo_screenheight() - 680) // 2
+        self.geometry(f"600x680+{x}+{y}")
+
+    def _preencher(self):
+        for chave, _, _ in self._CAMPOS:
+            self._vars[chave].set(self._dados.get(chave) or "")
+
+    def _salvar(self):
+        from fiscal.nfce_uf_config import NfceUfConfig
+        dados = {chave: (self._vars[chave].get().strip() or None)
+                 for chave, _, _ in self._CAMPOS}
+        # c_uf e fuso são obrigatórios
+        if not dados.get("c_uf"):
+            messagebox.showwarning("Atenção", "Código IBGE (cUF) é obrigatório.", parent=self)
+            return
+        if not dados.get("fuso_horario"):
+            dados["fuso_horario"] = "-03:00"
+        try:
+            NfceUfConfig.salvar(self._dados["uf"], dados)
+            if self._ao_salvar:
+                self._ao_salvar()
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Erro", str(e), parent=self)

@@ -50,7 +50,8 @@ class Empresa:
                 cod_pais=?, nome_pais=?,
                 serie_nfe=?, prox_nfe=?, serie_nfce=?, prox_nfce=?,
                 serie_nfse=?, prox_nfse=?, serie_cte=?, prox_cte=?,
-                ambiente_fiscal=?, cert_path=?, cert_senha=?
+                ambiente_fiscal=?, cert_path=?, cert_senha=?,
+                id_csc=?, csc_token=?
             WHERE id=?
             """,
             (
@@ -85,6 +86,8 @@ class Empresa:
                 int(dados.get("ambiente_fiscal", 2)),
                 dados.get("cert_path"),
                 dados.get("cert_senha"),
+                dados.get("id_csc"),
+                dados.get("csc_token"),
                 id,
             )
         )

@@ -71,8 +71,9 @@ class NfceService:
 
         # 8. Enviar para SEFAZ
         from fiscal.nfce_sefaz import NfceSefaz
+        _uf_empresa = str(empresa.get("estado", "PB") or "PB").strip()
         sefaz = NfceSefaz(config["cert_path"], config.get("cert_senha", ""),
-                          config.get("ambiente", 2))
+                          config.get("ambiente", 2), uf=_uf_empresa)
         resultado = sefaz.autorizar(xml_assinado)
 
         # Log da comunicação
@@ -95,7 +96,7 @@ class NfceService:
                        atualizado_em=datetime('now','localtime')
                    WHERE id=?""",
                 (resultado["protocolo"], xml_prot, qr_url,
-                 "http://www.sefaz.pb.gov.br/nfce",
+                 "http://www.sefaz.pb.gov.br/nfcehom" if config.get("ambiente", 2) == 2 else "http://www.sefaz.pb.gov.br/nfce",
                  dt.now().strftime("%Y-%m-%d %H:%M:%S"), doc_id),
             )
             # 9a. Gerar DANFE
@@ -186,13 +187,19 @@ class NfceService:
 
     def consultar_status_sefaz(self) -> dict:
         from fiscal.nfce_config_model import NfceConfig
+        from core.session import Session
         config = NfceConfig.carregar()
         if not config:
             return {"online": False, "motivo": "Config NFC-e não encontrada"}
         try:
             from fiscal.nfce_sefaz import NfceSefaz
-            sefaz  = NfceSefaz(config["cert_path"], config.get("cert_senha", ""),
-                               config.get("ambiente", 2))
+            from core.database import DatabaseManager
+            empresa = DatabaseManager.master().fetchone(
+                "SELECT estado FROM empresas WHERE id=?", (Session.empresa()["id"],)
+            ) or {}
+            uf = str(empresa.get("estado", "PB") or "PB").strip()
+            sefaz = NfceSefaz(config["cert_path"], config.get("cert_senha", ""),
+                              config.get("ambiente", 2), uf=uf)
             return sefaz.consultar_servico()
         except Exception as e:
             return {"online": False, "motivo": str(e)}
